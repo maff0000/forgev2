@@ -10,6 +10,19 @@ There is no orchestration runtime, no queue, no daemon, and no database.
 Dispatch is a direct Claude Code `Agent` tool call; the message bus is the
 tool call's return value.
 
+## The PL startup gate
+
+Before any of the mechanics below run, the PL verifies a PID, a git
+repository, and a GitHub remote all exist for the project — a hard
+refuse-to-proceed check, not an assumption baked into step 1. Full doctrine
+in `skills/forge/SKILL.md#0-pl-startup-gate--verify-before-touching-anything`;
+the runnable check is `ops/pl-startup-gate`, which depends on nothing but
+`git` so it works identically whether the PL is this household's Claude
+Code, Trinity acting as PL-sponsor, or a human engineer running Forge cold
+on their own machine against a project Forge has never seen. A missing
+piece is a product-authority gap the PL hands back, never one it papers
+over.
+
 ## How "the PL owns Git" is enforced
 
 Not by a custom isolated-clone tool. `Agent` calls made with
@@ -38,9 +51,12 @@ under review, and its own instructions.
 Proven boundaries, inherited directly from ANVIL: Git/GitHub delivery
 surfaces, evidence preservation, and native subagent dispatch as a viable
 Engineer/Auditor mechanism (ANVIL's `WORKER-002` through `WORKER-004`
-established this for Codex subagents; Forge's Claude-native equivalent is
-asserted by construction, not yet independently re-proven — the first real
-PID through the loop is that proof).
+established this for Codex subagents; Forge's own self-test —
+`docs/evidence/FORGE-SELFTEST-0001.md` — re-proved it for Claude-native
+dispatch specifically: a genuinely correct implementation returns GREEN,
+and a genuinely blind, independently-verified WORKER-015-class defect the
+Auditor was never shown in advance returns PRODUCT_RED. The gate
+generalises rather than pattern-matching one named example).
 
 Not implemented: queues, leases, a workflow engine, a generic SDK copied into
 governed projects, or an async resume daemon. See

@@ -244,10 +244,16 @@ project should require Forge application code to be embedded in it.
 
 ## Proven state
 
-Nothing yet — Forge has not run a real delivery loop. This section updates
-as increments prove capability, matching ANVIL's own evidence-first
-discipline. Do not assume the framework works until a real PID has moved
-through it end to end.
+`docs/evidence/FORGE-SELFTEST-0001.md` demonstrated the delivery loop end
+to end on two self-test PIDs: a genuinely correct implementation returned
+`GREEN` with real-browser verification, and a genuinely blind,
+independently-verified WORKER-015-class defect — designed with R2D2,
+never shown to the Auditor in advance — returned `PRODUCT_RED` for the
+right reason. This proves the mechanics run and that the browser-
+verification gate generalises rather than pattern-matching one named
+example. It does not yet prove Forge on a real external project with a
+real product owner; that remains the next real test, not assumed from
+this one.
 
 ## Current direction
 

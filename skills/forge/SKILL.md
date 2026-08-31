@@ -10,6 +10,44 @@ Forge-governed project. It is not application runtime code, and governed
 applications must not import Forge because of it — same boundary ANVIL draws
 around `frontend-product-ui/SKILL.md`.
 
+## 0. PL startup gate — verify before touching anything
+
+**Hard gate, not a habit.** Before a PL takes any action on a project —
+before writing a PID, before dispatching an Engineer, before touching a
+single file — it verifies three things exist for that project:
+
+1. A PID.
+2. A git repository.
+3. A GitHub remote.
+
+Run `./ops/pl-startup-gate <PROJECT_ROOT>` (ships with Forge, depends on
+nothing but `git` — no fabric, no Redis, no household-specific tooling,
+because the mode that matters most here is a human engineer standing Forge
+up cold on their own machine, on a project Forge has never seen, with none
+of this repository's context available). It exits `0` only if all three are
+present; otherwise it prints exactly which is missing.
+
+**If any of the three is missing, that is a PRODUCT-AUTHORITY GAP, not an
+implementation problem.** The PL does not invent a PID on its own
+authority, does not quietly `git init`, does not create a GitHub repo
+behind anyone's back to paper over the gap. It stops, states plainly which
+of the three is missing, and returns the decision to whoever holds product
+authority for that project — the Human, a PL-sponsor acting on the Human's
+behalf, or whichever engineer is running Forge. This mirrors ANVIL's own
+DISCOVER/CURRENT-TRUTH doctrine but makes it an explicit refuse-to-proceed
+check instead of an implied first step — the difference between a
+framework that actually governs and one that assumes governance already
+happened before it was invoked. See `docs/ARCHITECTURE.md` for where this
+sits relative to the rest of the loop.
+
+**This gate checks existence only, not correctness.** "The PID exists" is
+the gate; "is the PID actually right" (Forge's own bootstrap found a PID
+field that was present and still wrong — see `docs/evidence/FORGE-BOOTSTRAP-0001.md`)
+stays a separate, later concern for step 1 below, not something folded into
+a hard go/no-go check. Existence-only keeps the gate cheap and unambiguous;
+folding correctness in would turn a clean pass/fail into a judgment call
+the gate isn't meant to make.
+
 ## 1. Discover
 
 Point at the project's repository. Do not assume old documentation,

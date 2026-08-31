@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# PL startup gate: verify PID + git + GitHub remote exist for a project
+# before a PL takes any action on it. Depends on nothing but git and a
+# POSIX shell -- no fabric, no Redis, no household-specific tooling. This
+# is what lets a human engineer stand Forge up cold on their own machine
+# and get the same gate everyone else gets.
+#
+# Usage: ./ops/pl-startup-gate <PROJECT_ROOT>
+#
+# Exit 0 only if all three checks pass. Any failure prints exactly which
+# check failed and exits nonzero -- the PL must stop and hand the gap back
+# to whoever holds product authority for that project. It does not invent
+# a PID, does not run `git init`, does not create a GitHub repo to paper
+# over the gap.
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+  echo "usage: $0 <PROJECT_ROOT>" >&2
+  exit 2
+fi
+
+PROJECT_ROOT="$1"
+missing=()
+
+if [ ! -d "$PROJECT_ROOT" ]; then
+  echo "GATE FAILED: PROJECT_ROOT does not exist: $PROJECT_ROOT" >&2
+  echo "This is a product-authority gap, not something to invent past. Stop." >&2
+  exit 1
+fi
+
+if [ ! -f "$PROJECT_ROOT/PID.md" ]; then
+  missing+=("PID (no $PROJECT_ROOT/PID.md)")
+fi
+
+if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  missing+=("git repository (no .git found at or above $PROJECT_ROOT)")
+fi
+
+if git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if ! git -C "$PROJECT_ROOT" remote -v 2>/dev/null | grep -q "github\.com"; then
+    missing+=("GitHub remote (git remote -v has no github.com entry)")
+  fi
+else
+  missing+=("GitHub remote (cannot check -- no git repository)")
+fi
+
+if [ ${#missing[@]} -gt 0 ]; then
+  echo "GATE FAILED -- missing before any PL action may proceed:" >&2
+  for item in "${missing[@]}"; do
+    echo "  - $item" >&2
+  done
+  echo >&2
+  echo "This is a PRODUCT-AUTHORITY GAP, not an implementation problem. The PL" >&2
+  echo "does not invent a PID, does not silently 'git init', does not create a" >&2
+  echo "GitHub repo behind anyone's back. Stop, state what is missing (as above)," >&2
+  echo "and return the decision to whoever holds product authority for this" >&2
+  echo "project." >&2
+  exit 1
+fi
+
+echo "GATE PASSED: PID.md, git repository, and GitHub remote all present at $PROJECT_ROOT"
+exit 0
