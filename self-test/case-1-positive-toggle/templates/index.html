@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Forge Self-Test — Toggle</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 40rem;
+      margin: 3rem auto;
+      padding: 0 1rem;
+      color: #1a1a1a;
+      background: #ffffff;
+    }
+    button {
+      font-size: 1rem;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+    }
+    #details-panel {
+      margin-top: 1rem;
+      padding: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Forge Self-Test: Toggle</h1>
+  <button id="toggle-button" type="button" aria-expanded="false" aria-controls="details-panel">
+    Show details
+  </button>
+  <div id="details-panel" hidden>
+    <p>These are the details. This panel toggles visible and hidden using the
+    native HTML <code>hidden</code> attribute.</p>
+  </div>
+
+  <script src="{{ url_for('static', filename='toggle.js') }}"></script>
+</body>
+</html>
