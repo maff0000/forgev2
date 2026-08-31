@@ -1,6 +1,6 @@
 # Architecture
 
-Forge has three layers: doctrine (this `docs/` tree and `skills/forge/SKILL.md`),
+Forge has three layers: doctrine (this `docs/` tree and `.claude/skills/forge/SKILL.md`),
 subagent definitions (`.claude/agents/forge-engineer.md`,
 `.claude/agents/forge-auditor.md`), and the PL itself — which is not a
 separate process, it is whichever Claude Code session is driving a given PID
@@ -15,7 +15,7 @@ tool call's return value.
 Before any of the mechanics below run, the PL verifies a PID, a git
 repository, and a GitHub remote all exist for the project — a hard
 refuse-to-proceed check, not an assumption baked into step 1. Full doctrine
-in `skills/forge/SKILL.md#0-pl-startup-gate--verify-before-touching-anything`;
+in `.claude/skills/forge/SKILL.md#0-pl-startup-gate--verify-before-touching-anything`;
 the runnable check is `ops/pl-startup-gate`, which depends on nothing but
 `git` so it works identically whether the PL is this household's Claude
 Code, Trinity acting as PL-sponsor, or a human engineer running Forge cold

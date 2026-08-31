@@ -51,7 +51,7 @@ acceptance. Human/CGPT may issue a `PRODUCT RED` finding against a
 technically GREEN implementation, returning it to the bounded repair loop.
 User-facing PIDs must declare a presentation target — `FUNCTIONAL_ONLY`,
 `PRODUCT_USABLE`, or `PRESENTATION_POLISHED` — per
-`skills/forge/SKILL.md`. This exists because markup that looks correct and
+`.claude/skills/forge/SKILL.md`. This exists because markup that looks correct and
 server-side tests that pass cleanly are not sufficient evidence that a
 user-facing feature actually works: a control can carry the right markup
 while a stylesheet rule elsewhere silently overrides its visible state, and
@@ -131,7 +131,7 @@ The exact `.forge/` contract is not frozen. It will be introduced
 incrementally only when real projects prove which information is necessary —
 Forge's own bootstrap did not need one, so none exists yet.
 
-## Central Forge
+## Central Forge — hub, not a single-project tool
 
 Forge remains a separate project/runtime responsible for the PL doctrine,
 Engineer/Auditor subagent definitions, execution doctrine, clean workspace
@@ -146,6 +146,32 @@ independently without contaminating one another.
        Project A   Project B   Project C
         .forge/     .forge/     .forge/
 ```
+
+**`/srv/forge` is where a PL boots from — never a project directory.** A
+project such as an email-builder application is a `PROJECT_ROOT` a given
+PL session is *told to operate on*, passed as a parameter (to
+`ops/pl-startup-gate` and to every Engineer/Auditor dispatch), never the
+directory a PL session itself is launched or rooted in. A Human boots a
+PL from the hub and points it at a project, rather than opening a session
+inside each project in turn.
+
+**Concurrent PLs on different projects work by construction, not by added
+machinery.** Verified directly, not assumed: `ops/pl-startup-gate` takes
+`PROJECT_ROOT` as its only parameter and holds no state of its own between
+invocations — no lock file, no `/tmp` state, nothing written anywhere. The
+Engineer and Auditor definitions contain no hardcoded project path and no
+shared/global/singleton assumption. Nothing in this doctrine set uses
+Redis, a daemon, or any mechanism a second, independent PL session could
+collide with. Each PL is simply an independent Claude Code session, booted
+from `/srv/forge` with the `forge` skill discoverable, given a different
+`PROJECT_ROOT`. Multiple such sessions running at once, each against a
+different project, share nothing to contaminate — the same one-hub,
+many-independent-spokes shape as the diagram above.
+
+This does not cover two PLs working the *same* project concurrently — that
+is a within-project coordination question (branch/worktree naming
+collisions are possible there) distinct from the hub model this section
+states, and not yet exercised or proven.
 
 ## Workspace doctrine
 

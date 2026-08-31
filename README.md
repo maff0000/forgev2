@@ -35,7 +35,7 @@ docs/
   OPERATING-MODEL.md
   PID-TEMPLATE.md
   evidence/              per-increment evidence trail
-skills/forge/SKILL.md    the PL-facing delivery loop
+.claude/skills/forge/SKILL.md    the PL-facing delivery loop
 .claude/agents/
   forge-engineer.md      bounded implementation subagent
   forge-auditor.md       independent review subagent (mandatory real-browser

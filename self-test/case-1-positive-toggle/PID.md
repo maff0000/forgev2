@@ -94,4 +94,4 @@ each step (not just that a click handler fired) — per
 ## 14. Development Inputs
 
 `.claude/agents/forge-engineer.md`, `.claude/agents/forge-auditor.md`,
-`skills/forge/SKILL.md`.
+`.claude/skills/forge/SKILL.md`.

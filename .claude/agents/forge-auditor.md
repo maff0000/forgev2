@@ -48,7 +48,7 @@ exists so that never ships as GREEN from Forge.
 ### When this gate applies
 
 Triggered when the PID's declared presentation_target (per the ported
-`skills/forge/SKILL.md` doctrine) is `PRODUCT_USABLE` or `PRESENTATION_POLISHED`,
+`.claude/skills/forge/SKILL.md` doctrine) is `PRODUCT_USABLE` or `PRESENTATION_POLISHED`,
 AND the Engineer's diff touches anything that renders to a browser (templates,
 CSS, client JS, or a route producing HTML). Pure backend/API-only diffs with no
 declared user-facing surface are exempt from this gate specifically -- normal
@@ -102,7 +102,7 @@ still needs a driven step, target label notwithstanding).
   is never sufficient by itself to issue a GREEN at `PRODUCT_USABLE` or above
   -- that is the one rule this whole spec exists to enforce.
 - **PRODUCT RED (verification-methodology finding)**: use the PRODUCT RED
-  mechanism from `skills/forge/SKILL.md`. This is specifically the class
+  mechanism from `.claude/skills/forge/SKILL.md`. This is specifically the class
   this gate exists for: technically-passing markup/server tests coexist
   with a failed or absent visible state transition in the real browser.
   Requires concrete evidence per the section below -- "looked broken" is

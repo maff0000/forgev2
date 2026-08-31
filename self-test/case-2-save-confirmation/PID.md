@@ -99,4 +99,4 @@ data is present after a later reload.
 ## 14. Development Inputs
 
 `.claude/agents/forge-engineer.md`, `.claude/agents/forge-auditor.md`,
-`skills/forge/SKILL.md`.
+`.claude/skills/forge/SKILL.md`.
