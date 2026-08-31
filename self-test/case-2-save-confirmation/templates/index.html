@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Forge Self-Test — Save a Note</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 40rem;
+      margin: 3rem auto;
+      padding: 0 1rem;
+      color: #1a1a1a;
+      background: #ffffff;
+    }
+    #note-input {
+      font-size: 1rem;
+      padding: 0.5rem;
+      width: 100%;
+      max-width: 24rem;
+      box-sizing: border-box;
+    }
+    #save-button {
+      font-size: 1rem;
+      padding: 0.5rem 1rem;
+      margin-left: 0.5rem;
+      cursor: pointer;
+    }
+    #saved-note {
+      margin-top: 1rem;
+      padding: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    #saved-note:empty {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Forge Self-Test: Save a Note</h1>
+  <input id="note-input" type="text" placeholder="Type a note">
+  <button id="save-button" type="button">Save</button>
+
+  <div id="save-status"></div>
+
+  {% if saved_note %}
+  <div id="saved-note">{{ saved_note }}</div>
+  {% else %}
+  <div id="saved-note"></div>
+  {% endif %}
+
+  <script src="{{ url_for('static', filename='save.js') }}"></script>
+</body>
+</html>
