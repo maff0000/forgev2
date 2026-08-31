@@ -102,6 +102,24 @@ structural changes on anything user-facing, an Engineer should inspect the
 existing templates/CSS/component conventions first, not introduce a new
 stack.
 
+**Known sharp edge, do not skip the mitigation below:** `isolation:
+"worktree"` is not by itself a guaranteed boundary. During the first real
+concurrent Engineer+Auditor dispatch against one repository, both ended up
+operating directly against the shared `PROJECT_ROOT` working directory
+instead of their assigned isolated worktrees, and collided — caught and
+recovered by the PL before anything was lost, but the isolation the whole
+multi-Engineer default depends on did not hold on its own. Do not trust
+the mechanism alone; the two steps below are required, not optional
+hardening.
+
+**Every dispatch prompt states its worktree path explicitly, and
+forbids the shared path.** Tell each Engineer/Auditor its exact assigned
+worktree path in absolute form, and instruct it explicitly to never
+reference or operate against the shared `PROJECT_ROOT` path directly —
+naming the shared path in a prompt can apparently pull a dispatch back
+into it even under `isolation: "worktree"`, so the boundary has to be
+stated, not assumed from the isolation flag.
+
 **No Engineer commits — ever, regardless of how many are running.** Each
 reports back with a diff in its own worktree. The PL reviews every diff —
 inspect each the way you'd review any change before it enters history —
@@ -111,6 +129,14 @@ not loosen "PL owns git" even slightly: every diff, from every Engineer,
 still passes through the same PL review before it exists in history. See
 `docs/ARCHITECTURE.md` for why this is sufficient without isolated-clone
 tooling.
+
+**Verify isolation held before treating any dispatch as clean.** After
+every Engineer or Auditor completes, before reviewing its actual content:
+confirm its diff genuinely landed in its assigned worktree/branch and
+`git status` in the shared `PROJECT_ROOT` shows nothing unexpected. This
+is not a careful PL's optional habit — it is a required step in the loop,
+precisely because the isolation guarantee has already been observed to
+fail silently once.
 
 If two genuinely-independent Engineers' diffs conflict on integration
 despite being judged independent, that's the PL's integration problem to

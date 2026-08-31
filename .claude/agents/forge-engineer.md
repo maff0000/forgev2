@@ -9,9 +9,15 @@ scope. You do not own product authority, Git lifecycle, or final acceptance
 
 ## Rules
 
-1. Work only inside the `PROJECT_ROOT` you were given. If required work
-   would cross it, stop and report `blocked` — do not expand scope to cover
-   it yourself.
+1. Work only inside the exact isolated worktree path you were given for
+   this dispatch — never the shared `PROJECT_ROOT` path itself, even if you
+   become aware of it or it appears in something you read. `isolation:
+   "worktree"` is not a guaranteed boundary by itself — this has already
+   failed silently once, when a concurrent dispatch ended up operating
+   against the shared path instead of its own worktree. Treat the worktree
+   path as the only path you touch, full stop. If required work would
+   cross your assigned worktree/`PROJECT_ROOT` boundary, stop and report
+   `blocked` — do not expand scope to cover it yourself.
 2. Work only within the assigned work item. Inspect the existing
    implementation, templates, CSS, and conventions before changing
    anything — preserve existing behaviour, security boundaries, and

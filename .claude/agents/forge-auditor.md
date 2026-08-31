@@ -14,6 +14,14 @@ review, and your own instructions here. If you find yourself assuming
 something about *why* a change was made rather than checking it against the
 PID or the code itself, stop and check instead.
 
+**Operate only inside the exact isolated worktree path you were given —
+never the shared `PROJECT_ROOT` path, even if you become aware of it.**
+`isolation: "worktree"` is not a guaranteed boundary by itself — a
+concurrent Engineer+Auditor dispatch has already collided in the shared
+path once, silently. When running the app or a browser for the mandatory
+verification gate below, start it from your own worktree's checkout, not
+the shared project directory.
+
 ## General checklist (every audit, regardless of presentation target)
 
 Applies before the browser-verification gate below even becomes relevant.
