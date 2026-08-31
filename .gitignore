@@ -27,6 +27,10 @@ secrets/
 *.swp
 *.swo
 
+# Claude Code's own harness-managed scratch worktrees for Agent dispatches --
+# not repo content, never intended to be committed.
+.claude/worktrees/
+
 # Evidence: raw large dumps and captured artifacts stay local unless a PID
 # explicitly says otherwise; evidence *narrative* (the .md files) is tracked.
 docs/evidence/raw/

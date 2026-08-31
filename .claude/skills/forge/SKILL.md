@@ -75,29 +75,59 @@ Small enough that an Engineer dispatch can complete one without needing to
 guess at intent, and an Auditor can check it against the PID without asking
 what was meant.
 
-## 4. Dispatch the Engineer
+**The default question at this step is which of these work items are
+genuinely independent of each other — not whether to parallelize.**
+Independent work items get dispatched concurrently, each its own isolated
+worktree, as standard practice. Sequential, single-Engineer dispatch is the
+*fallback* — for work items genuinely dependent on each other's output, or
+where independence can't actually be established — not the default
+posture. A PL that only ever dispatches one Engineer at a time on a PID
+with several genuinely independent parts isn't being cautious, it's leaving
+the actual point of this loop on the table.
 
-`Agent` tool call, `isolation: "worktree"`. Give it: the specific work item,
-the `PROJECT_ROOT` boundary, what it may and may not touch, and the relevant
-PID sections. Before styling or structural changes on anything user-facing,
-the Engineer should inspect the existing templates/CSS/component
-conventions first, not introduce a new stack.
+The judgment call this puts on the PL is decomposition quality, not raw
+concurrency. Spraying several Engineers at loosely-related work to look
+efficient is a different, worse failure mode than the one this default
+fixes — the fix is "parallelize what's actually independent," not
+"maximize how many Engineers are running."
 
-**The Engineer does not commit.** It reports back with a diff in its own
-worktree. The PL reviews that diff — inspect it the way you'd review any
-change before it enters history — and commits it from the PL's own working
-tree onto the branch the PL controls. See `docs/ARCHITECTURE.md` for why
-this is sufficient without isolated-clone tooling.
+## 4. Dispatch the Engineer(s)
 
-If required work would cross `PROJECT_ROOT`, the Engineer should stop and
+`Agent` tool call(s), `isolation: "worktree"` — one per independent work
+item identified above, dispatched concurrently when more than one is
+genuinely independent. Each gets its own isolated worktree and its own
+scoped prompt: the specific work item, the `PROJECT_ROOT` boundary, what it
+may and may not touch, and the relevant PID sections. Before styling or
+structural changes on anything user-facing, an Engineer should inspect the
+existing templates/CSS/component conventions first, not introduce a new
+stack.
+
+**No Engineer commits — ever, regardless of how many are running.** Each
+reports back with a diff in its own worktree. The PL reviews every diff —
+inspect each the way you'd review any change before it enters history —
+and commits them itself onto the branch the PL controls, in whatever order
+and however many separate commits makes sense. Concurrent dispatch does
+not loosen "PL owns git" even slightly: every diff, from every Engineer,
+still passes through the same PL review before it exists in history. See
+`docs/ARCHITECTURE.md` for why this is sufficient without isolated-clone
+tooling.
+
+If two genuinely-independent Engineers' diffs conflict on integration
+despite being judged independent, that's the PL's integration problem to
+resolve — and worth treating as a signal the decomposition itself was
+wrong, not just a mechanical merge to push through.
+
+If required work would cross `PROJECT_ROOT`, an Engineer should stop and
 report rather than expand scope. Route that back through the PID, not
 around it.
 
 ## 5. Reconcile and test
 
-Run the project's mechanical tests against the PL-integrated commit before
-audit. A RED here is not an Auditor question yet — fix or route back to the
-Engineer first.
+Run the project's mechanical tests against the PL-integrated commit(s)
+before audit — after every dispatched Engineer's diff, whether there was
+one or several, has been reviewed and committed. A RED here is not an
+Auditor question yet — fix or route back to the responsible Engineer
+first.
 
 ## 6. Dispatch the Auditor
 

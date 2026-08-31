@@ -198,14 +198,19 @@ reproducibility.
 ## Claude-native execution doctrine
 
 Bounded implementation and independent audit are Claude Code subagent
-dispatches, not a custom orchestration layer:
+dispatches, not a custom orchestration layer. Decomposition into
+independent work items is dispatched in parallel by default, not one
+Engineer at a time:
 
 ```text
 PL
   ↓
-Engineer dispatch — Agent tool, isolation: worktree, scoped prompt
+decompose — identify which work items are genuinely independent
   ↓
-diff reviewed and committed by the PL (Engineer never commits)
+Engineer dispatch(es) — Agent tool, isolation: worktree, scoped prompt
+  (concurrent when independent; sequential only when genuinely dependent)
+  ↓
+every diff reviewed and committed by the PL (no Engineer ever commits)
   ↓
 Auditor dispatch — fresh Agent call, zero inherited context
   ↓

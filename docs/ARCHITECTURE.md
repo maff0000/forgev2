@@ -39,6 +39,23 @@ objects — without building any of that machinery. It falls out of the
 primitive Claude Code already provides, once the "Engineer doesn't commit"
 contract is stated and the PL actually reviews before committing.
 
+## Parallel Engineer dispatch
+
+Multiple Engineer dispatches running concurrently is Forge's default
+posture at decomposition, not an escalation — see
+`.claude/skills/forge/SKILL.md#3-decompose-and-sequence`. Nothing about the
+mechanism changes with count: each `Agent` call with `isolation: "worktree"`
+gets its own independent worktree regardless of how many run at once, and
+the PL reviews and commits every diff the same way whether there's one or
+several. Concurrency multiplies how many diffs the PL reviews, not how many
+git-authoritative actors exist — "PL owns git" does not loosen with scale.
+
+This is architecturally supported by construction, not yet independently
+proven the way single-Engineer dispatch was by Forge's own self-test
+(`docs/evidence/FORGE-SELFTEST-0001.md` ran one Engineer per case). The
+first real multi-Engineer dispatch on an actual PID is that proof, not
+assumed from this reasoning alone.
+
 ## Auditor isolation
 
 Auditor dispatches are fresh `Agent` calls, not forks — a fork would inherit
