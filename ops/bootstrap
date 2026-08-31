@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Run once per fresh clone. core.hooksPath is repo-local git config — it does
+# not travel with `git clone` — so the secret-scanning gate must be wired
+# explicitly before the first commit from this checkout.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+git config core.hooksPath scripts/hooks
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "[bootstrap] gitleaks not found on PATH — install before committing:" >&2
+  echo "[bootstrap]   https://github.com/gitleaks/gitleaks/releases" >&2
+  exit 1
+fi
+
+echo "[bootstrap] core.hooksPath -> scripts/hooks"
+echo "[bootstrap] gitleaks $(gitleaks version) found on PATH"
+echo "[bootstrap] ready."

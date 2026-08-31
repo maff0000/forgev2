@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Node (Playwright disposable installs must never be committed)
+node_modules/
+
+# Secrets — never committed, no exceptions
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+*_credentials.json
+secrets/
+*.secret
+
+# Local/ephemeral state — Redis is messaging only, nothing durable here either
+*.local.json
+.forge-state/
+
+# OS / editor noise
+.DS_Store
+*.swp
+*.swo
+
+# Evidence: raw large dumps and captured artifacts stay local unless a PID
+# explicitly says otherwise; evidence *narrative* (the .md files) is tracked.
+docs/evidence/raw/
+*.screenshot.png
