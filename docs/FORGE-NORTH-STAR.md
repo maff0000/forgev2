@@ -1,10 +1,5 @@
 # Forge — North Star Architecture
 
-Ported from [ANVIL's North Star](https://github.com/maff0000/anvil/blob/main/docs/ANVIL-NORTH-STAR.md)
-with Codex-specific mechanisms swapped for Claude-native ones. The shape is
-deliberately unchanged — see `docs/evidence/FORGE-BOOTSTRAP-0001.md` for what
-was substituted and why.
-
 ## Purpose
 
 Forge is a lightweight development-control system for taking software
@@ -56,13 +51,15 @@ acceptance. Human/CGPT may issue a `PRODUCT RED` finding against a
 technically GREEN implementation, returning it to the bounded repair loop.
 User-facing PIDs must declare a presentation target — `FUNCTIONAL_ONLY`,
 `PRODUCT_USABLE`, or `PRESENTATION_POLISHED` — per
-`skills/forge/SKILL.md`. This is the direct, load-bearing fix for the gap
-documented in ANVIL's `email-builder/docs/evidence/worker-015-human-repair.md`:
-a technically-GREEN implementation with a completely dead UI button, because
-every prior automated audit checked markup and server responses and never a
-real rendered browser. Forge's Auditor carries mandatory real-browser
-verification for `PRODUCT_USABLE`+ as a day-one requirement, not later
-polish — see `.claude/agents/forge-auditor.md`.
+`skills/forge/SKILL.md`. This exists because markup that looks correct and
+server-side tests that pass cleanly are not sufficient evidence that a
+user-facing feature actually works: a control can carry the right markup
+while a stylesheet rule elsewhere silently overrides its visible state, and
+every check that only inspects rendered HTML or server responses will
+report GREEN while the control is completely dead the moment a real person
+opens the page. Forge's Auditor carries mandatory real-browser verification
+for `PRODUCT_USABLE`+ as a day-one requirement, not later polish — see
+`.claude/agents/forge-auditor.md`.
 
 ## Authority model
 
@@ -70,8 +67,9 @@ polish — see `.claude/agents/forge-auditor.md`.
 
 Own product intent, PID definition, major product/architectural authority,
 and final independent scrutiny. CGPT additionally reviews Forge's own
-framework code (this repository) for fidelity to ANVIL's doctrine — a
-distinct role from CGPT's per-project product-authority role above.
+framework code (this repository) independently, as an outside second
+opinion on the framework's own soundness — a distinct role from CGPT's
+per-project product-authority role above.
 
 ### PL (Project Lead)
 
@@ -82,8 +80,7 @@ acceptance or rejection inside the delivery loop.
 
 **The PL alone commits, branches, and manages the PR lifecycle.** Engineers
 implement inside an authorised scope; they do not commit to the canonical
-branch, do not touch Git history, and do not have GitHub authority. This
-mirrors ANVIL's Axiom model exactly.
+branch, do not touch Git history, and do not have GitHub authority.
 
 ### Engineer
 
@@ -189,10 +186,10 @@ Auditor dispatch — fresh Agent call, zero inherited context
 GREEN verdict, or RED routed to a fresh repair Engineer
 ```
 
-Forge does not port ANVIL's local-GPU/Qwen benchmark harness. That harness
-existed to give Codex a second, cheaper set of eyes; Claude Code's native
-subagent tooling already is that second set of eyes. Reintroduce local-model
-delegation only if a real, observed capability gap proves it is needed.
+Forge does not include a local-model benchmark or delegation harness.
+Claude Code's native subagent dispatch already provides an independent
+second set of eyes on any change. Reintroduce local-model delegation only
+if a real, observed capability gap proves it is needed.
 
 ## Anti-bloat doctrine
 
@@ -229,12 +226,10 @@ PL delivery loop
 ```
 
 Forge must not assume old documentation or local worktrees are correct;
-repository and runtime evidence establish truth. The prove-out target is
-`email-builder` for Estate Research, whose PID.md `PROJECT_ROOT` field
-already demonstrated this: it pointed at a location that did not match where
-the project actually lived, resolved by evidence (commit history,
-doctrine-content diff) rather than assumption — see
-`docs/evidence/FORGE-BOOTSTRAP-0001.md`.
+repository and runtime evidence establish truth. A stale `PROJECT_ROOT`
+field is exactly the kind of thing that looks harmless until an Engineer
+or Auditor trusts it over the actual repository state — verify against
+real git history (remotes, commit timestamps), not a prior document.
 
 ## Multi-project goal
 
@@ -247,21 +242,21 @@ project should require Forge application code to be embedded in it.
 `docs/evidence/FORGE-SELFTEST-0001.md` demonstrated the delivery loop end
 to end on two self-test PIDs: a genuinely correct implementation returned
 `GREEN` with real-browser verification, and a genuinely blind,
-independently-verified WORKER-015-class defect — designed with R2D2,
-never shown to the Auditor in advance — returned `PRODUCT_RED` for the
-right reason. This proves the mechanics run and that the browser-
-verification gate generalises rather than pattern-matching one named
-example. It does not yet prove Forge on a real external project with a
-real product owner; that remains the next real test, not assumed from
-this one.
+independently-verified defect of the exact class the browser-verification
+gate exists to catch — designed with R2D2, never shown to the Auditor in
+advance — returned `PRODUCT_RED` for the right reason. This proves the
+mechanics run and that the gate generalises rather than recognising only
+one illustrative example. It does not yet prove Forge on a real external
+project with a real product owner; that remains the next real test, not
+assumed from this one.
 
 ## Current direction
 
 Do not build the final framework from speculation. Progress bit by bit
 through useful projects. The immediate proving ground is finishing
 `email-builder` for Estate Research: process is reportedly nearly right, but
-unattractive and buggy — the actual test of whether Forge closed the
-worker-015 gap or just moved it.
+unattractive and buggy — the actual test of whether Forge closed the gap
+its mandatory browser-verification gate exists to close, or just moved it.
 
 ## North-star success condition
 

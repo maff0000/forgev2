@@ -1,9 +1,7 @@
 # [Project Name] — Project Initiation Document
 
-Structure adapted from ANVIL's own PID shape
-(`email-builder/PID.md`), trimmed to the sections every Forge-governed
-project needs and kept in this order. Add project-specific sections; do not
-drop these.
+This is the standard shape every Forge-governed project's PID follows. Add
+project-specific sections; do not drop these.
 
 ## 1. Identity
 
@@ -12,7 +10,8 @@ PROJECT_ROOT:
 
 <absolute path — verify it against actual git remote/commit history before
 writing it here, not against an assumption or a prior document. A stale
-PROJECT_ROOT is exactly how Forge's own bootstrap discrepancy happened.>
+PROJECT_ROOT field looks harmless until an Engineer or Auditor trusts it
+over the actual repository state.>
 
 GitHub repository:
 
@@ -97,5 +96,5 @@ review, per `.claude/agents/forge-auditor.md`.
 
 ## 14. Development Inputs
 
-Existing code, prior PIDs, evidence, or external doctrine (e.g. ANVIL's own
-docs) the Engineer/Auditor should read before starting.
+Existing code, prior PIDs, or evidence the Engineer/Auditor should read
+before starting.

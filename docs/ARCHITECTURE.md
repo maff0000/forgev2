@@ -33,11 +33,11 @@ worktree. The contract layered on top, stated in
 PL inspects that diff and commits it itself, from its own working tree, onto
 the branch it controls.
 
-This gets ANVIL's `email-builder/.ack/decisions/ADR-001-isolated-worker-repositories.md`
-safety property — a bounded worker never writes canonical Git refs or
-objects — without building ADR-001's isolated-clone machinery. It falls out
-of the primitive Claude Code already provides, once the "Engineer doesn't
-commit" contract is stated and the PL actually reviews before committing.
+This achieves the same safety property a more elaborate isolated-clone-per-
+worker design would — a bounded worker never writes canonical Git refs or
+objects — without building any of that machinery. It falls out of the
+primitive Claude Code already provides, once the "Engineer doesn't commit"
+contract is stated and the PL actually reviews before committing.
 
 ## Auditor isolation
 
@@ -48,15 +48,14 @@ under review, and its own instructions.
 
 ## What is proven, what is not
 
-Proven boundaries, inherited directly from ANVIL: Git/GitHub delivery
-surfaces, evidence preservation, and native subagent dispatch as a viable
-Engineer/Auditor mechanism (ANVIL's `WORKER-002` through `WORKER-004`
-established this for Codex subagents; Forge's own self-test —
-`docs/evidence/FORGE-SELFTEST-0001.md` — re-proved it for Claude-native
-dispatch specifically: a genuinely correct implementation returns GREEN,
-and a genuinely blind, independently-verified WORKER-015-class defect the
-Auditor was never shown in advance returns PRODUCT_RED. The gate
-generalises rather than pattern-matching one named example).
+Proven boundaries: Git/GitHub delivery surfaces, evidence preservation, and
+native subagent dispatch as a viable Engineer/Auditor mechanism. Forge's own
+self-test — `docs/evidence/FORGE-SELFTEST-0001.md` — established this for
+Claude-native dispatch: a genuinely correct implementation returns GREEN,
+and a genuinely blind, independently-verified defect of the exact class the
+browser-verification gate exists to catch — never shown to the Auditor in
+advance — returns PRODUCT_RED. The gate generalises rather than recognising
+only one illustrative example.
 
 Not implemented: queues, leases, a workflow engine, a generic SDK copied into
 governed projects, or an async resume daemon. See

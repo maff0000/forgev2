@@ -1,7 +1,9 @@
 # Forge
 
-A Claude-native port of [ANVIL](https://github.com/maff0000/anvil)'s
-PID → PL → Engineer → Auditor delivery framework.
+A lightweight PID → PL → Engineer → Auditor delivery-control framework for
+Claude Code: point it at a project with product intent defined, and it runs
+a bounded implementation-and-independent-audit loop toward a delivery
+candidate, while a Human retains product authority and final acceptance.
 
 North star: **PID in → autonomous Claude-native delivery → independently
 scrutinised product out.** See [docs/FORGE-NORTH-STAR.md](docs/FORGE-NORTH-STAR.md).
@@ -28,7 +30,7 @@ itself part of Forge's history, not host-local convenience).
 
 ```text
 docs/
-  FORGE-NORTH-STAR.md    doctrine ported from ANVIL, Claude-native substitutions
+  FORGE-NORTH-STAR.md    core doctrine: purpose, authority model, durable truth
   ARCHITECTURE.md
   OPERATING-MODEL.md
   PID-TEMPLATE.md
@@ -42,10 +44,10 @@ scripts/hooks/           committed git hooks (secret scanning)
 ops/                     small operator scripts, no framework
 ```
 
-## Relationship to ANVIL
+## Scope
 
-ANVIL (`/srv/codex/anvil`, Codex-native) remains untouched and canonical for
-its own lineage. Forge ports its doctrine, not its Python local-GPU benchmark
-harness — Claude Code's native subagent tooling replaces what ANVIL built
-Qwen delegation for. See `docs/evidence/` for the specific porting decisions
-and what was deliberately left out.
+Forge does not include a local-model benchmark or delegation harness.
+Claude Code's native subagent dispatch (Engineer/Auditor) already provides
+an independent second set of eyes on any change; a separate delegation
+layer for a cheaper or local model would duplicate that without a proven
+need. See `docs/FORGE-NORTH-STAR.md#anti-bloat-doctrine`.

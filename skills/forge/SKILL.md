@@ -7,8 +7,7 @@ description: PL-facing delivery loop for Forge-governed projects — PID intake,
 
 This is the doctrine the driving session follows while acting as PL for a
 Forge-governed project. It is not application runtime code, and governed
-applications must not import Forge because of it — same boundary ANVIL draws
-around `frontend-product-ui/SKILL.md`.
+applications must not import Forge because of it.
 
 ## 0. PL startup gate — verify before touching anything
 
@@ -33,12 +32,12 @@ authority, does not quietly `git init`, does not create a GitHub repo
 behind anyone's back to paper over the gap. It stops, states plainly which
 of the three is missing, and returns the decision to whoever holds product
 authority for that project — the Human, a PL-sponsor acting on the Human's
-behalf, or whichever engineer is running Forge. This mirrors ANVIL's own
-DISCOVER/CURRENT-TRUTH doctrine but makes it an explicit refuse-to-proceed
-check instead of an implied first step — the difference between a
-framework that actually governs and one that assumes governance already
-happened before it was invoked. See `docs/ARCHITECTURE.md` for where this
-sits relative to the rest of the loop.
+behalf, or whichever engineer is running Forge. This is deliberately an
+explicit refuse-to-proceed check rather than an implied first step — the
+difference between a framework that actually governs and one that assumes
+governance already happened before it was invoked. See
+`docs/ARCHITECTURE.md` for where this sits relative to the rest of the
+loop.
 
 **This gate checks existence only, not correctness.** "The PID exists" is
 the gate; "is the PID actually right" (Forge's own bootstrap found a PID
@@ -112,9 +111,12 @@ touches anything that renders to a browser, the Auditor's real-browser
 verification gate is **mandatory, not optional** — see
 `.claude/agents/forge-auditor.md` for the full spec. Source-only review,
 however clean, is never sufficient by itself to issue a GREEN at that
-target. This is the direct, carried-forward fix for the gap in
-`worker-015-human-repair.md`: markup and server tests all passed while a
-core UI control was completely dead in a real browser.
+target: markup that looks correct and server-side tests that pass cleanly
+can both hold true while a UI control is completely dead in a real
+browser — a stylesheet rule silently overriding a native attribute, a
+client handler that never reads its own network response, or any similar
+gap between "technically correct" and "actually works." Only a real
+rendered/interactive check catches that class of defect.
 
 ## 7. Adjudicate
 

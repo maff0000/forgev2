@@ -78,7 +78,7 @@ computed visibility, not markup presence or a fired event handler.
 Merged via PR into `main`: [PR #1](https://github.com/maff0000/forge/pull/1),
 merge commit `808163e`. Worktree removed after merge.
 
-## Case 2 — negative control (WORKER-015-class canary)
+## Case 2 — negative control (the canary that actually matters)
 
 The canary design was deliberately not the PL's call to make solo. R2D2
 designed the browser-verification gate itself in `.claude/agents/forge-auditor.md`
@@ -86,9 +86,9 @@ and was asked to judge what shape of defect would test it honestly, per the
 WO. Design question sent: `helm:comms:r2d2:wo_forge_selftest_0001_canary_design_ask`.
 
 Two candidate shapes were proposed for her review — deliberately *not* a
-replay of worker-015's literal CSS-override-on-`[hidden]` bug, since that
-exact pattern is named in `forge-auditor.md`'s own spec and testing it
-verbatim would show pattern-matching, not generalisation:
+replay of the literal CSS-override-on-`[hidden]` bug used as the
+illustrative example in `forge-auditor.md`'s own spec, since testing that
+exact pattern verbatim would show pattern-matching, not generalisation:
 
 - **B** — an id-mismatched click handler (correct markup, no server
   involvement, wrong element targeted).
@@ -97,9 +97,9 @@ verbatim would show pattern-matching, not generalisation:
 
 R2D2's decision (`r2d2:comms:helm:wo_forge_selftest_0001_canary_design_response`,
 full text preserved in fabric): **C, not B.** Her reasoning: B never
-involves the server at all, so it doesn't reproduce the actual worker-015
-shape (a technically-GREEN layer coexisting with a broken browser
-experience) — it's also catchable by an Auditor that only greps source for
+involves the server at all, so it doesn't reproduce the actual shape this
+gate exists to catch (a technically-GREEN layer coexisting with a broken
+browser experience) — it's also catchable by an Auditor that only greps source for
 an id mismatch, without ever launching a browser, which would prove nothing
 about whether the *mandatory browser gate specifically* is what's doing the
 catching. C reproduces the shape precisely and additionally exercises the
@@ -117,7 +117,7 @@ anything:
 2. **Keep the Auditor genuinely blind that it's a canary at all.** Telling
    it in advance turns this into "can it find something it was told to
    look for" rather than a test of generalisation — the entire concern
-   that motivated rejecting the literal worker-015 replay in the first
+   that motivated rejecting the literal known-bug replay in the first
    place.
 
 ### Build (per R2D2's spec)

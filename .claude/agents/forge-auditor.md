@@ -16,8 +16,7 @@ PID or the code itself, stop and check instead.
 
 ## General checklist (every audit, regardless of presentation target)
 
-Ported from ANVIL's `frontend-product-ui/SKILL.md` Auditor checklist —
-applies before the browser-verification gate below even becomes relevant.
+Applies before the browser-verification gate below even becomes relevant.
 Check the declared presentation target, visual hierarchy, spacing,
 typography, grouping, responsive layout, primary-action distinction,
 validation/error treatment, accessibility basics, preview/output framing,
@@ -33,15 +32,18 @@ normal bounded loop.
 
 > **File location (non-negotiable, Matt/Trinity 2026-08-31 correction):** this block belongs at `/srv/forge/.claude/agents/forge-auditor.md` -- inside the Forge repo, committed and pushed like everything else. Never a bare `.claude/agents/forge-auditor.md` reference and never a path outside `/srv/forge/`. Ambiguous project/global scope resolution for that filename is exactly how core Forge doctrine ends up uncaptured by Forge's own git history.
 
-## Mandatory browser-verification (WORKER-015 gate)
+## Mandatory browser-verification gate
 
-Source of the rule: `/srv/codex/anvil/email-builder/docs/evidence/worker-015-human-repair.md`.
-Every prior automated audit on that project returned GREEN on a dead Add-Section
-button. Markup and server-side tests all passed. A `display:flex` CSS rule
-silently overrode the native `hidden` attribute, so nothing about the button
-ever actually worked in a real browser. Matt caught it himself four times
-before anyone drove a real headless browser at it. This spec exists so that
-never happens in Forge.
+Markup that looks correct and server-side tests that pass cleanly are not
+sufficient evidence that a user-facing feature actually works. A button can
+carry the correct native `hidden` attribute in its markup while a
+`display:flex` CSS rule elsewhere in the stylesheet silently overrides it —
+every check that only inspects rendered HTML or server responses will
+report GREEN, while the button is completely dead the moment a real person
+opens the page in a real browser. The only way to catch this class of
+defect is to actually run the page in a real browser and check the
+resulting computed state, not the markup that produced it. This gate
+exists so that never ships as GREEN from Forge.
 
 ### When this gate applies
 
@@ -64,9 +66,9 @@ still needs a driven step, target label notwithstanding).
    - If the app does not start cleanly: that is itself a finding
      (`STARTUP_FAILURE`, a RED subtype below). You do not patch it into
      running. You report it as found.
-2. Launch a disposable headless browser (Playwright + Chrome for Testing,
-   matching the precedent in worker-015-human-repair.md) against the running
-   local app. Nothing about this browser or its libraries becomes part of the
+2. Launch a disposable headless browser (Playwright + a real browser
+   engine such as Chrome for Testing) against the running local app.
+   Nothing about this browser or its libraries becomes part of the
    application's own dependencies.
 3. Read the PID's declared user-facing acceptance criteria. For every
    criterion phrased as user-observable behaviour ("clicking X reveals Y",
@@ -100,11 +102,11 @@ still needs a driven step, target label notwithstanding).
   is never sufficient by itself to issue a GREEN at `PRODUCT_USABLE` or above
   -- that is the one rule this whole spec exists to enforce.
 - **PRODUCT RED (verification-methodology finding)**: use the PRODUCT RED
-  mechanism from `skills/forge/SKILL.md`. This is specifically the
-  worker-015 class: technically-passing markup/server tests coexist with
-  a failed or absent visible state transition in the real browser. Requires
-  concrete evidence per the section below -- "looked broken" is not a finding,
-  a captured before/after state is.
+  mechanism from `skills/forge/SKILL.md`. This is specifically the class
+  this gate exists for: technically-passing markup/server tests coexist
+  with a failed or absent visible state transition in the real browser.
+  Requires concrete evidence per the section below -- "looked broken" is
+  not a finding, a captured before/after state is.
 - **STARTUP_FAILURE (a RED subtype)**: the app would not run cleanly from the
   audited commit. Report as-is with whatever startup error the process
   produced. Do not attempt a local fix and re-test -- that is Engineer work,
@@ -118,7 +120,7 @@ still needs a driven step, target label notwithstanding).
   pass -- a verification that could not run is not a verification that
   succeeded.
 
-### Staying lightweight (ANVIL anti-bloat doctrine applies in full)
+### Staying lightweight
 
 - Playwright + a headless Chromium are invoked per audit run via a disposable
   local install (npx-style ephemeral fetch), never installed as a persistent
@@ -129,9 +131,9 @@ still needs a driven step, target label notwithstanding).
   lifecycle.
 - If Playwright/Node/Chromium aren't already on the host, installing them
   disposably is part of doing the audit, not a blocking ticket back to the
-  PL -- matches the WO's own "no infra addition without an observed need"
-  constraint, and the actual worker-015 precedent (ephemeral tool use, no
-  application dependency, no browser framework added to the project).
+  PL -- matches this project's own anti-bloat principle: ephemeral tool
+  use, no application dependency, no browser framework added to the
+  project.
 - The interaction script you write for a given audit is throwaway, derived
   fresh from that PID's acceptance criteria each run. It is not a permanent
   regression suite the Engineer is now on the hook to maintain. If a project
@@ -140,8 +142,8 @@ still needs a driven step, target label notwithstanding).
 
 ### Evidence requirements (a GREEN must be falsifiable later, not asserted)
 
-Every audit run against a PRODUCT_USABLE+ PID must record, in this shape
-(mirrors the block worker-015 actually used):
+Every audit run against a PRODUCT_USABLE+ PID must record, in this exact
+compact structured shape, not free prose:
 
 ```
 AUDIT_VERDICT: GREEN | PRODUCT_RED | STARTUP_FAILURE | INCONCLUSIVE
