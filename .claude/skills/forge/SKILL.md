@@ -84,17 +84,15 @@ set, specifically hunting for a preserve/change pair that can't both hold,
 before an Engineer is dispatched to discover it instead.
 
 **Write a measured claim and an inferred claim in visibly different voices.**
-Observed: a PID stated that four affected form submissions were "ordinary
-buttons on the editor page." Three of them were; the fourth was reachable
-by no browser gesture at all. Every other claim in that section had been
-established by driving real requests, and that one had been inferred from
-reading a template — but nothing in the wording distinguished them, so an
-Engineer only found it mid-implementation. Inference in a PID is
-legitimate; inference wearing the voice of measurement is not, because the
-next reader cannot tell which claims to re-check and so re-checks none.
-Marking it costs one clause — "inferred from the template, not driven."
-This and the two related ways a genuinely measured number can still fail to
-be evidence: `docs/EVIDENCE-DOCTRINE.md`.
+Observed: a PID called four affected form submissions "ordinary buttons on
+the editor page." Three were; the fourth was reachable by no browser gesture
+at all, and an Engineer only found out mid-implementation — because that one
+inferred line was written in the same flat voice as the driven claims around
+it, so nothing said which to re-check. Inference in a PID is legitimate;
+inference wearing the voice of measurement is not. Marking it costs one
+clause — "inferred from the template, not driven." This and the two related
+ways a genuinely measured number can still fail to be evidence:
+`docs/EVIDENCE-DOCTRINE.md`.
 
 **Where a criterion can only be proven in the browser, say so in the PID,
 before dispatch.** Observed: a defect lived entirely in client-side
@@ -259,19 +257,17 @@ first.
 
 **A failed check is a claim too, and earns the same scrutiny as a
 successful one.** Observed: a PL hypothesised that a pretty-printer
-explained a ~12,500 byte size discrepancy, tested the hypothesis, measured
-its effect as "a few hundred bytes", and recorded the cause as
-*unexplained*. Refusing to assert an unverified hypothesis was the right
-instinct — but the refutation was itself wrong twice over: it counted the
-wrong population (it missed that the printer also runs over server-rendered
-content on load) and it valued a boundary at one character where
-indentation made it about 137. The mechanism had been the correct
-explanation the whole time. A negative result claims less, so it attracts
-less challenge, and that is precisely why it gets through unexamined.
-Before recording a cause as unexplained or a hypothesis as refuted, state
-what population you measured and what you assumed each unit was worth —
-those are the two places this failed. See
-`docs/EVIDENCE-DOCTRINE.md#refutations`.
+explained a ~12,500 byte discrepancy, measured its effect as "a few hundred
+bytes", and recorded the cause as *unexplained*. Refusing to assert an
+unverified hypothesis was the right instinct — but the refutation was itself
+wrong twice over: it counted the wrong population (the printer also runs
+over server-rendered content on load) and valued a boundary at one character
+where indentation made it about 137. The hypothesis had been correct all
+along. A negative result claims less, so it attracts less challenge, and
+that is precisely why it gets through unexamined. Before recording a cause
+as unexplained or a hypothesis as refuted, state what population you
+measured and what you assumed each unit was worth — the two places this
+failed. See `docs/EVIDENCE-DOCTRINE.md#refutations`.
 
 ## 6. Dispatch the Auditor
 
@@ -307,6 +303,9 @@ nothing about this one, and an Auditor following it handles the crash
 correctly on its own evidence. The same shape covers instrument hazards: a
 warning about stale one-shot dialog handlers in the browser tooling is
 tooling hygiene, not a hint about the diff.
+(email-builder: `LIBRARY-UTF8-CORRUPTION-2026-09-02.md` §J item 1 — as with
+the citations in `docs/EVIDENCE-DOCTRINE.md`, that evidence file lives in
+the governed project's repository, not this one.)
 
 **The test to apply before adding anything to an Auditor dispatch prompt:**
 would you give this same instruction to an Auditor on a different PID? If
@@ -355,6 +354,16 @@ verdict, replayable interaction steps for anything browser-verified,
 before/after state — landed in the repo, not left fabric-only. Fabric may
 carry the live "auditing now" / "verdict is X" message during the session;
 it must never be the only place the evidence lives.
+
+**The Auditor's dispatch prompt goes into the evidence trail verbatim,
+beside the verdict it produced.** §6's test — would you give this same
+instruction to an Auditor on a different PID? — is applied privately while
+composing and leaves nothing behind, so a later reader cannot tell whether
+the PL handed the Auditor a hint about this diff, which is the exact failure
+that test exists to prevent. Preserving the prompt is what makes the audit's
+independence checkable rather than asserted (PID §13.7), and it costs a
+paste. A prompt you would not want sitting in the trail is that test firing
+late.
 
 **A correction to something already cited by SHA goes at the citation's
 destination, not into the original commit.** See
