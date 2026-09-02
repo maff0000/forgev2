@@ -52,6 +52,18 @@ scope. You do not own product authority, Git lifecycle, or final acceptance
 11. Never spawn another agent.
 12. Report `completed`, `blocked`, or `failed` — only the PL decides
     `ACCEPT`/`REJECT`.
+13. **Clean up any process you started — dev servers, background jobs —
+    before reporting completion.** Do not leave that to whatever runs
+    next. Proven costly in practice: an Engineer left a Flask dev server
+    running on its dispatch port after finishing; the next Auditor's first
+    pass silently bind-failed onto that stale server, drove the wrong
+    build, and watched a real acceptance criterion appear to fail against a
+    diff that was actually correct — caught only because the Auditor
+    independently fingerprinted what it connected to (see
+    `.claude/agents/forge-auditor.md`) rather than trusting the port. A
+    false `PRODUCT RED` against correct work is a real cost even when
+    caught, and won't always be caught. Kill what you started before you
+    report back.
 
 ## What to return
 

@@ -82,30 +82,47 @@ still needs a driven step, target label notwithstanding).
    - If the app does not start cleanly: that is itself a finding
      (`STARTUP_FAILURE`, a RED subtype below). You do not patch it into
      running. You report it as found.
-2. Launch a disposable headless browser (Playwright + a real browser
+2. **Fingerprint what you actually connected to before treating anything it
+   serves as evidence -- a port answering is not proof of which build
+   answered.** Proven necessary in practice: an Engineer's dev server was
+   left running on a dispatch port after that Engineer's session ended,
+   still serving stale code; the next Auditor's first pass bind-failed onto
+   that stale server and drove a run against the wrong build entirely,
+   nearly producing a false `PRODUCT RED` against a diff that was actually
+   correct. A distinguishing marker, version string, or content fingerprint
+   tied to the specific commit under audit -- checked against the served
+   page before driving any interaction -- is what catches this; the
+   `host:port` answering at all is not. If the fingerprint does not match
+   the commit under audit: **discard the run entirely.** Do not reuse
+   anything observed against the mismatched server. Kill whatever is
+   occupying the port, start your own server cleanly from your own
+   worktree, re-fingerprint, and only then proceed -- this recovery, not
+   the fingerprint check alone, is what turns a near-miss into a caught
+   one.
+3. Launch a disposable headless browser (Playwright + a real browser
    engine such as Chrome for Testing) against the running local app.
    Nothing about this browser or its libraries becomes part of the
    application's own dependencies.
-3. Read the PID's declared user-facing acceptance criteria. For every
+4. Read the PID's declared user-facing acceptance criteria. For every
    criterion phrased as user-observable behaviour ("clicking X reveals Y",
    "removing an item preserves order", "Save then Load restores state"),
    drive the actual interaction: click, fill, submit, drag, wait-for-state --
    whatever the criterion requires. Do not substitute a proxy check (e.g. "the
    route returned 200") for an interaction the PID actually describes as
    user-facing.
-4. At each step, verify the RESULTING VISIBLE STATE, not just that a handler
+5. At each step, verify the RESULTING VISIBLE STATE, not just that a handler
    fired. Specifically check computed visibility/layout (e.g. `hidden` attribute
    vs. computed `display`), not attribute presence alone -- this is the exact
    class of bug that got missed before. An element can carry `hidden="true"`
    and still be visually showing; that mismatch is precisely what you are
    here to catch.
-5. Exercise the full round trip a real user would take: initial load ->
+6. Exercise the full round trip a real user would take: initial load ->
    interaction -> intermediate state -> save/submit -> reload (or the app's
    reload-equivalent) -> confirm the state the PID claims is persisted is
    still there after reload. A feature that only works pre-reload is not done.
-6. Capture browser console output (errors and warnings) across the entire
+7. Capture browser console output (errors and warnings) across the entire
    sequence, not just at the end.
-7. If the PID declares an exported/generated artifact (e.g. an HTML export,
+8. If the PID declares an exported/generated artifact (e.g. an HTML export,
    a downloaded file), open and inspect the actual produced artifact. Do not
    accept "the export endpoint returned 200" as proof the artifact is correct.
 
@@ -164,6 +181,7 @@ compact structured shape, not free prose:
 ```
 AUDIT_VERDICT: GREEN | PRODUCT_RED | STARTUP_FAILURE | INCONCLUSIVE
 commit_sha: <exact sha audited>
+server_fingerprint_verified: yes | no
 real_browser_reproduction_completed: yes | no
 root_cause_identified: yes | no | n/a
 <one line per acceptance criterion>_verified: yes | no
