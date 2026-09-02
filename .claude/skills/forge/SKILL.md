@@ -93,24 +93,85 @@ fixes — the fix is "parallelize what's actually independent," not
 
 ## 4. Dispatch the Engineer(s)
 
-`Agent` tool call(s), `isolation: "worktree"` — one per independent work
-item identified above, dispatched concurrently when more than one is
-genuinely independent. Each gets its own isolated worktree and its own
-scoped prompt: the specific work item, the `PROJECT_ROOT` boundary, what it
-may and may not touch, and the relevant PID sections. Before styling or
-structural changes on anything user-facing, an Engineer should inspect the
-existing templates/CSS/component conventions first, not introduce a new
-stack.
+`Agent` tool call(s) — one per independent work item identified above,
+dispatched concurrently when more than one is genuinely independent. Each
+gets its own isolated worktree and its own scoped prompt: the specific work
+item, the `PROJECT_ROOT` boundary, what it may and may not touch, and the
+relevant PID sections. Before styling or structural changes on anything
+user-facing, an Engineer should inspect the existing templates/CSS/component
+conventions first, not introduce a new stack.
 
-**Known sharp edge, do not skip the mitigation below:** `isolation:
-"worktree"` is not by itself a guaranteed boundary. During the first real
-concurrent Engineer+Auditor dispatch against one repository, both ended up
-operating directly against the shared `PROJECT_ROOT` working directory
-instead of their assigned isolated worktrees, and collided — caught and
-recovered by the PL before anything was lost, but the isolation the whole
-multi-Engineer default depends on did not hold on its own. Do not trust
-the mechanism alone; the two steps below are required, not optional
-hardening.
+**`isolation: "worktree"` isolates the calling session's own repository —
+that is only `PROJECT_ROOT` when there is no hub split.** Under the hub
+model (`docs/FORGE-NORTH-STAR.md#central-forge--hub-not-a-single-project-tool`),
+a PL boots from `/srv/forge` and is pointed at a separate `PROJECT_ROOT`;
+`isolation: "worktree"` in that case still cuts a worktree, but from
+Forge's own repository, not the project's. Full failure mode and the fix
+are below — read this before dispatching in the hub-model case.
+
+**Known sharp edge #1 — shared-path collision (mitigated below):**
+`isolation: "worktree"` is not by itself a guaranteed boundary even when it
+does isolate the right repository. During the first real concurrent
+Engineer+Auditor dispatch against one repository, both ended up operating
+directly against the shared `PROJECT_ROOT` working directory instead of
+their assigned isolated worktrees, and collided — caught and recovered by
+the PL before anything was lost, but the isolation the whole multi-Engineer
+default depends on did not hold on its own. Do not trust the mechanism
+alone; the two steps below ("states its worktree path explicitly" and
+"verify isolation held") are required, not optional hardening.
+
+**Known sharp edge #2 — isolated from the wrong repository entirely (hub
+model, proven in practice):** sharp edge #1 assumed the worktree at least
+came from the correct repository. Under the hub model it does not.
+`isolation: "worktree"` cuts its worktree from the *calling session's own
+root* — for a PL booted from `/srv/forge` and pointed at a separate
+`PROJECT_ROOT`, that root is Forge's own repository. The Engineer lands in
+a perfectly valid, cleanly isolated worktree — of the wrong project's
+history. The mechanism does not error or warn; it isolates exactly as
+documented, it just isolates the wrong thing. A check of the form "confirm
+the Engineer is isolated from `PROJECT_ROOT`" **passes** in this failure
+mode — the worktree genuinely is isolated from `PROJECT_ROOT`, just not
+*of* it. ARCHITECTURE.md's claim that `isolation: "worktree"` "already
+gives an Engineer dispatch its own clean git worktree" is true and not
+sufficient by itself — clean isolation of the wrong repository is not what
+anyone needs.
+
+**The distinguishing check, proven in practice:** `git cat-file -t <a
+commit SHA known to exist in PROJECT_ROOT's real history>`, run inside the
+Engineer's worktree. If `PROJECT_ROOT`'s own commits do not resolve there,
+the worktree is isolated from the wrong repository, full stop.
+
+**Reference Engineer behavior when this precondition is broken — worth
+naming explicitly, not just fixing the trigger:** proven in practice by two
+Engineers dispatched under this exact failure. Both reported `blocked`
+without writing a single line of the actual work item, refused to
+self-rescue by cloning or fetching the correct project into the worktree to
+route around it, and deliberately withheld any patch output — so an
+empty/missing patch on a `blocked` report could not be misread as "produced
+no diff, nothing needed." That is the exact behavior the Engineer contract
+exists to produce on a broken premise: stop, don't improvise past it, don't
+send an ambiguous signal. See `.claude/agents/forge-engineer.md#reference-behavior-blocked-on-a-broken-precondition`.
+
+**Hub-model dispatch procedure — use this instead of `isolation:
+"worktree"` whenever `PROJECT_ROOT` is not the PL's own session root:**
+
+1. The PL creates the worktree itself, explicitly against `PROJECT_ROOT` —
+   e.g. `git -C <PROJECT_ROOT> worktree add <absolute-path> -b <branch>` —
+   never the bare `isolation: "worktree"` flag on the Agent call.
+2. Before dispatching, the PL runs the distinguishing check above —
+   `git cat-file -t <known-PROJECT_ROOT-commit>` — inside that worktree.
+   Only dispatch the Engineer once this resolves; if it fails, the worktree
+   was built from the wrong repository and must not be handed to an
+   Engineer.
+3. Dispatch the Engineer as a plain `Agent` call — no `isolation` flag, the
+   PL already built the correct isolated worktree by hand — with that
+   worktree's absolute path stated explicitly, per "Every dispatch prompt
+   states its worktree path explicitly" below.
+
+When the PL's own session root genuinely *is* `PROJECT_ROOT` — Forge
+editing itself, no hub split, no separate target project to isolate from at
+all — `isolation: "worktree"` remains correct and simpler to use directly;
+skip the manual worktree creation above.
 
 **Every dispatch prompt states its worktree path explicitly, and
 forbids the shared path.** Tell each Engineer/Auditor its exact assigned
@@ -132,11 +193,13 @@ tooling.
 
 **Verify isolation held before treating any dispatch as clean.** After
 every Engineer or Auditor completes, before reviewing its actual content:
-confirm its diff genuinely landed in its assigned worktree/branch and
-`git status` in the shared `PROJECT_ROOT` shows nothing unexpected. This
-is not a careful PL's optional habit — it is a required step in the loop,
+confirm its diff genuinely landed in its assigned worktree/branch, that the
+worktree's history is genuinely `PROJECT_ROOT`'s (the distinguishing check
+above, if it wasn't already run as a hub-model precondition), and `git
+status` in the shared `PROJECT_ROOT` shows nothing unexpected. This is not
+a careful PL's optional habit — it is a required step in the loop,
 precisely because the isolation guarantee has already been observed to
-fail silently once.
+fail silently twice, in two different ways.
 
 If two genuinely-independent Engineers' diffs conflict on integration
 despite being judged independent, that's the PL's integration problem to

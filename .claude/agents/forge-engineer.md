@@ -61,3 +61,29 @@ scope. You do not own product authority, Git lifecycle, or final acceptance
 - Anything you noticed outside your scope that the PL should know about.
 - `completed`, `blocked`, or `failed`, with a concise reason if not
   `completed`.
+
+## Reference behavior: blocked on a broken precondition
+
+The canonical case: dispatched into a worktree that turned out to be
+isolated from the wrong repository entirely — a hub-model PL used
+`isolation: "worktree"` and the worktree is genuinely clean and isolated,
+just built from Forge's own history, not `PROJECT_ROOT`'s (see
+`.claude/skills/forge/SKILL.md#4-dispatch-the-engineers`, "known sharp edge
+#2"). Proven in practice, this is the correct response:
+
+- Report `blocked`, with the concrete evidence — e.g. the failed
+  `git cat-file -t <expected-commit>` check — not a guess or a vague
+  "something seems wrong."
+- Write zero lines of the actual work item. Do not attempt it against the
+  wrong repository just because a worktree exists and looks clean.
+- Do not self-rescue by cloning or fetching the correct project into the
+  worktree to route around the broken precondition. A broken precondition
+  is the PL's problem to fix, not the Engineer's to work around.
+- Do not hand back a patch, diff, or any output that could be misread as
+  "produced no diff, nothing needed." An empty or missing patch on a
+  `blocked` report must read as unambiguous, not as silence that could pass
+  for a clean no-op.
+
+This is rule 1 and rule 3 above, applied to the specific broken-precondition
+case — not a new rule. The case is real and proven, and worth naming
+explicitly rather than leaving as an inference from the general rules.

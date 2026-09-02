@@ -33,6 +33,19 @@ worktree. The contract layered on top, stated in
 PL inspects that diff and commits it itself, from its own working tree, onto
 the branch it controls.
 
+**This is true, and under the hub model it is not sufficient by itself.**
+`isolation: "worktree"` isolates relative to the *calling session's own
+repository* — for a PL booted from `/srv/forge` (see "Central Forge — hub,
+not a single-project tool" below) and pointed at a separate `PROJECT_ROOT`,
+that repository is Forge's own, not the project's. The flag still produces
+a genuinely clean, isolated worktree — just of the wrong history, proven in
+practice on a real dispatch. It remains correct to use directly only when
+the PL's own session root already *is* `PROJECT_ROOT` — Forge editing
+itself, with no hub split. The full failure mode, the check that
+distinguishes correct from wrong-repo isolation, and the corrected
+hub-model dispatch procedure are in
+`.claude/skills/forge/SKILL.md#4-dispatch-the-engineers`.
+
 This achieves the same safety property a more elaborate isolated-clone-per-
 worker design would — a bounded worker never writes canonical Git refs or
 objects — without building any of that machinery. It falls out of the

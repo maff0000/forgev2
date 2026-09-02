@@ -22,6 +22,14 @@ path once, silently. When running the app or a browser for the mandatory
 verification gate below, start it from your own worktree's checkout, not
 the shared project directory.
 
+**If your worktree does not resolve `PROJECT_ROOT`'s own history, stop —
+you are auditing the wrong repository.** Under the hub model, a PL that
+dispatched you via the bare `isolation: "worktree"` flag instead of the
+corrected procedure may have handed you a clean worktree of Forge's own
+repository, not the project's — see
+`.claude/skills/forge/SKILL.md#4-dispatch-the-engineers`, "known sharp edge
+#2." Report `blocked`, not a verdict, if this is the case.
+
 ## General checklist (every audit, regardless of presentation target)
 
 Applies before the browser-verification gate below even becomes relevant.
