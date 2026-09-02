@@ -108,6 +108,20 @@ PBGv2: an auto-resume/timer mechanism that treated Redis as durable
 coordination state instead of a message bus, and burned a week of tokens in
 one night.
 
+**"In git" is not the same claim as "durable" — the sharper rule is where
+the reader's path actually goes, not just that it's somewhere trackable.**
+Proven in practice: a commit message overclaimed ("not a regression") in a
+way a later audit disproved. The correction was written into the evidence
+file, not by amending the commit — the commit's SHA was already cited
+elsewhere in the audit trail, and rewriting it would break that citation
+while leaving the overclaim's substance uncorrected in the exact place
+anyone following the citation would land. **Never rewrite a commit
+something else already points at by SHA. Append the correction where the
+pointer leads** — the citation's actual destination, not just anywhere in
+the repo that happens to be technically trackable. "Everything lives in
+git" is necessary but not sufficient; "it lives where the next reader's
+path arrives" is the actual test.
+
 ## Project integration model
 
 Forge's own code is not copied into governed applications, and applications

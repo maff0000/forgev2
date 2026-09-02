@@ -68,6 +68,21 @@ assume.
 Technical tests alone do not establish that target — this single field is
 what gates the Auditor's browser-verification requirement below.
 
+**Before dispatching, read the PID's own acceptance criteria against each
+other — not just each one in isolation.** Seen twice across two increments,
+same shape both times: a regression criterion written as "still behaves as
+today" that quietly contradicts a "change Y" criterion stated elsewhere in
+the same PID. Both times an Engineer caught the contradiction and reported
+it rather than silently resolving it either way — correct Engineer
+fallback behavior — but the check belongs before dispatch, not after. The
+reason this is genuinely easy to miss while composing: the contradiction is
+invisible from inside the section being written — a "preserve X" criterion
+reads correctly on its own, a "change Y" criterion reads correctly on its
+own, and the conflict exists only in the relationship between them, not in
+either sentence alone. Read the finished acceptance-criteria list back as a
+set, specifically hunting for a preserve/change pair that can't both hold,
+before an Engineer is dispatched to discover it instead.
+
 ## 3. Decompose and sequence
 
 Break the PID's scope into bounded, independently reviewable work items.
@@ -239,6 +254,23 @@ rendered/interactive check catches that class of defect.
 
 ## 7. Adjudicate
 
+**Spot-check at least one Auditor finding per audit, routinely — not only
+when something else contradicts it.** A real miss surfaced this: the PL
+rejected an Auditor's "card copy names a non-existent region" finding only
+after checking it directly, and found the Auditor had inspected `<legend>`
+elements and missed a real `<h2>` heading — the PL only checked because two
+separate audits happened to disagree with each other. A finding nothing
+else contradicts currently gets less scrutiny by default, purely because
+there is no visible trigger to check it. The check costs almost nothing —
+one command, a few seconds — against the artifact directly (not against the
+Engineer's account of it, not against the Auditor's own narrative of it).
+That low cost is the actual argument for doing it routinely rather than
+reserving it for findings that already look suspicious: an Auditor that has
+never been independently checked isn't proven independent, it's just
+trusted by default. This is a floor — pick at least one finding, verify it
+directly — not a replacement for deeper scrutiny when something does look
+off.
+
 - **GREEN** — accept. Proceed to PR.
 - **PRODUCT RED** — a technically-passing implementation that misses the
   declared presentation target, with concrete evidence (not "looked
@@ -258,6 +290,12 @@ verdict, replayable interaction steps for anything browser-verified,
 before/after state — landed in the repo, not left fabric-only. Fabric may
 carry the live "auditing now" / "verdict is X" message during the session;
 it must never be the only place the evidence lives.
+
+**A correction to something already cited by SHA goes at the citation's
+destination, not into the original commit.** See
+`docs/FORGE-NORTH-STAR.md#durable-truth` — never rewrite a commit another
+part of the evidence trail already points at; append the correction where
+that pointer leads.
 
 ## Anti-bloat reminder
 
