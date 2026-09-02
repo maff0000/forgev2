@@ -103,28 +103,59 @@ still needs a driven step, target label notwithstanding).
    engine such as Chrome for Testing) against the running local app.
    Nothing about this browser or its libraries becomes part of the
    application's own dependencies.
-4. Read the PID's declared user-facing acceptance criteria. For every
+4. **Establish that the criteria you are about to check are capable of
+   failing, before you trust any of them passing.** The question is not
+   "did this pass" but "could this have passed by accident." Proven
+   necessary: a fix stopped UTF-8 corruption inside a base64-encoded blob,
+   and had that blob happened to contain no multi-byte characters, every
+   acceptance criterion would have passed cleanly while the defect stayed
+   live -- the whole audit would have been vacuously true. The Auditor that
+   caught this closed it in two moves, which are the general shape: confirm
+   the input still exercises the defect (it verified the served blob still
+   carried 48 non-ASCII bytes and no escape sequences), then confirm the
+   check still fails against the unfixed behaviour (it ran an in-browser
+   differential showing the *old* expression still corrupted that exact
+   payload). The same question applies to a test suite you are relying on:
+   one Auditor established that no pre-existing test was anchored to the
+   shipped values by forcing the constants to five different value pairs
+   and confirming the suite responded. **If non-vacuity cannot be
+   established, that is a finding, not a pass** -- either strengthen the
+   input until the check can fail, or state explicitly in your evidence
+   which gate is actually load-bearing for that criterion. Record the
+   result either way in `non_vacuity_established`. Full mechanism and the
+   related evidence failures: Forge's `docs/EVIDENCE-DOCTRINE.md`.
+5. Read the PID's declared user-facing acceptance criteria. For every
    criterion phrased as user-observable behaviour ("clicking X reveals Y",
    "removing an item preserves order", "Save then Load restores state"),
    drive the actual interaction: click, fill, submit, drag, wait-for-state --
    whatever the criterion requires. Do not substitute a proxy check (e.g. "the
    route returned 200") for an interaction the PID actually describes as
    user-facing.
-5. At each step, verify the RESULTING VISIBLE STATE, not just that a handler
+6. At each step, verify the RESULTING VISIBLE STATE, not just that a handler
    fired. Specifically check computed visibility/layout (e.g. `hidden` attribute
    vs. computed `display`), not attribute presence alone -- this is the exact
    class of bug that got missed before. An element can carry `hidden="true"`
    and still be visually showing; that mismatch is precisely what you are
    here to catch.
-6. Exercise the full round trip a real user would take: initial load ->
+7. Exercise the full round trip a real user would take: initial load ->
    interaction -> intermediate state -> save/submit -> reload (or the app's
    reload-equivalent) -> confirm the state the PID claims is persisted is
    still there after reload. A feature that only works pre-reload is not done.
-7. Capture browser console output (errors and warnings) across the entire
+8. Capture browser console output (errors and warnings) across the entire
    sequence, not just at the end.
-8. If the PID declares an exported/generated artifact (e.g. an HTML export,
+9. If the PID declares an exported/generated artifact (e.g. an HTML export,
    a downloaded file), open and inspect the actual produced artifact. Do not
    accept "the export endpoint returned 200" as proof the artifact is correct.
+10. **Tear down what you started, and verify the reap by the port rather
+    than by the signal.** Kill the app you launched -- and then check the
+    port is actually free before you report, because a `kill` reporting
+    success is not proof the listener died. Observed twice: once a signal
+    hit a wrapper shell while the Python process underneath kept the port
+    open; once the PID that had been launched was simply not the PID
+    holding the listener, and the fix was to find the process *by port*
+    (`ss -ltnp` / `lsof -i :<port>`) and kill that. A listener left behind
+    is what the fingerprint check in step 2 exists to survive -- do not be
+    the dispatch that creates the next one.
 
 ### Verdict rules
 
@@ -182,6 +213,7 @@ compact structured shape, not free prose:
 AUDIT_VERDICT: GREEN | PRODUCT_RED | STARTUP_FAILURE | INCONCLUSIVE
 commit_sha: <exact sha audited>
 server_fingerprint_verified: yes | no
+non_vacuity_established: yes | no | n/a
 real_browser_reproduction_completed: yes | no
 root_cause_identified: yes | no | n/a
 <one line per acceptance criterion>_verified: yes | no
@@ -191,6 +223,17 @@ confidence: high | medium | low
 ```
 
 Plus:
+- For every number you report as evidence, the construction path that
+  produced the thing you measured, and what the number excludes. A real
+  measurement of the wrong artifact is not evidence: an Auditor once
+  measured en-dash bytes across a whole export to prove a decoder fix, and
+  the first run counted server-rendered content that had never been broken,
+  so it could not distinguish a working fix from a failed one. It re-ran
+  with the unaffected content stripped and added an empty-campaign control
+  (`head 2 bytes / 0 mojibake, base 0 / 2`) -- that second run was the
+  evidence. Same rule for a refutation: "I checked and it wasn't that" is a
+  claim and gets the same scrutiny as a positive result. See Forge's
+  `docs/EVIDENCE-DOCTRINE.md`.
 - The literal interaction sequence as an ordered step list (action + target
   selector + input value where applicable) -- specific enough that a human or
   another agent could replay it verbatim without guessing.
