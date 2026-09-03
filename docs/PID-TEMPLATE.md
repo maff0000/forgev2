@@ -88,6 +88,14 @@ acceptance criteria explicitly and phrase them as observable interactions
 browser-verification gate drives exactly these criteria, and a vague
 criterion produces an unfalsifiable verdict.
 
+**Name any criterion that only the browser gate can prove.** If a defect or
+behaviour lives in client-side JavaScript, no server-side test can observe
+it — the whole suite can pass with the defect fully live. Say so here, and
+say what the mechanical tests are for instead: regression pins, not proof
+of the fix. Declaring it costs a sentence; discovering it at audit costs an
+Engineer dispatch spent writing tests that quietly cannot fail. See
+`.claude/skills/forge/SKILL.md#2-read-or-write-the-pid`.
+
 ## 13. Acceptance Definition
 
 What must be true for this PID to close. Reference the presentation target

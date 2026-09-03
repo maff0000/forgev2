@@ -83,6 +83,28 @@ either sentence alone. Read the finished acceptance-criteria list back as a
 set, specifically hunting for a preserve/change pair that can't both hold,
 before an Engineer is dispatched to discover it instead.
 
+**Write a measured claim and an inferred claim in visibly different voices.**
+Observed: a PID called four affected form submissions "ordinary buttons on
+the editor page." Three were; the fourth was reachable by no browser gesture
+at all, and an Engineer only found out mid-implementation — because that one
+inferred line was written in the same flat voice as the driven claims around
+it, so nothing said which to re-check. Inference in a PID is legitimate;
+inference wearing the voice of measurement is not. Marking it costs one
+clause — "inferred from the template, not driven." This and the two related
+ways a genuinely measured number can still fail to be evidence:
+`docs/EVIDENCE-DOCTRINE.md`.
+
+**Where a criterion can only be proven in the browser, say so in the PID,
+before dispatch.** Observed: a defect lived entirely in client-side
+JavaScript, so no server-side test could observe it — the whole Python
+suite could pass with the defect fully live. That PID declared the
+limitation up front and required the Python tests be written as regression
+pins and *named* as such, rather than described as proving the fix. The
+alternative is discovering the limitation at audit, after an Engineer has
+spent its dispatch writing tests that quietly cannot fail. Naming the
+load-bearing gate in the PID is nearly free, and it also tells the Auditor
+which criterion its browser run is the only evidence for.
+
 ## 3. Decompose and sequence
 
 Break the PID's scope into bounded, independently reviewable work items.
@@ -233,6 +255,20 @@ one or several, has been reviewed and committed. A RED here is not an
 Auditor question yet — fix or route back to the responsible Engineer
 first.
 
+**A failed check is a claim too, and earns the same scrutiny as a
+successful one.** Observed: a PL hypothesised that a pretty-printer
+explained a ~12,500 byte discrepancy, measured its effect as "a few hundred
+bytes", and recorded the cause as *unexplained*. Refusing to assert an
+unverified hypothesis was the right instinct — but the refutation was itself
+wrong twice over: it counted the wrong population (the printer also runs
+over server-rendered content on load) and valued a boundary at one character
+where indentation made it about 137. The hypothesis had been correct all
+along. A negative result claims less, so it attracts less challenge, and
+that is precisely why it gets through unexamined. Before recording a cause
+as unexplained or a hypothesis as refuted, state what population you
+measured and what you assumed each unit was worth — the two places this
+failed. See `docs/EVIDENCE-DOCTRINE.md#refutations`.
+
 ## 6. Dispatch the Auditor
 
 A **fresh** `Agent` call — never a fork, never a continuation of the
@@ -251,6 +287,34 @@ browser — a stylesheet rule silently overriding a native attribute, a
 client handler that never reads its own network response, or any similar
 gap between "technically correct" and "actually works." Only a real
 rendered/interactive check catches that class of defect.
+
+**When you know something the Auditor must not be told, give it a
+methodological instruction — never the finding.** Observed: an Engineer
+reported a pre-existing crash, unrelated to its diff, that would fire the
+moment an Auditor clicked one particular control. Both obvious options were
+bad. Telling the Auditor about it would launder the Engineer's reasoning
+into a supposedly independent audit — the one property the fresh dispatch
+exists to preserve. Saying nothing risked the Auditor hitting the crash and
+reporting a false finding against a diff that was actually correct. What
+the PL did instead was remind the Auditor that a criterion reading "zero
+*new* console errors" requires establishing base-commit behaviour before
+attributing anything to the diff. That is true of every audit, it leaks
+nothing about this one, and an Auditor following it handles the crash
+correctly on its own evidence. The same shape covers instrument hazards: a
+warning about stale one-shot dialog handlers in the browser tooling is
+tooling hygiene, not a hint about the diff.
+(email-builder: `LIBRARY-UTF8-CORRUPTION-2026-09-02.md` §J item 1 — as with
+the citations in `docs/EVIDENCE-DOCTRINE.md`, that evidence file lives in
+the governed project's repository, not this one.)
+
+**The test to apply before adding anything to an Auditor dispatch prompt:**
+would you give this same instruction to an Auditor on a different PID? If
+yes, it is methodology, and safe. If it only makes sense because of what
+you know about this particular diff, it is the finding in disguise, and
+handing it over costs the audit exactly the independence it was dispatched
+to provide. When it is the finding, it stays out of the prompt entirely: if
+what the Engineer found needs fixing, route it as its own work item after
+the audit returns, rather than smuggling it in as a hint.
 
 ## 7. Adjudicate
 
@@ -290,6 +354,16 @@ verdict, replayable interaction steps for anything browser-verified,
 before/after state — landed in the repo, not left fabric-only. Fabric may
 carry the live "auditing now" / "verdict is X" message during the session;
 it must never be the only place the evidence lives.
+
+**The Auditor's dispatch prompt goes into the evidence trail verbatim,
+beside the verdict it produced.** §6's test — would you give this same
+instruction to an Auditor on a different PID? — is applied privately while
+composing and leaves nothing behind, so a later reader cannot tell whether
+the PL handed the Auditor a hint about this diff, which is the exact failure
+that test exists to prevent. Preserving the prompt is what makes the audit's
+independence checkable rather than asserted (PID §13.7), and it costs a
+paste. A prompt you would not want sitting in the trail is that test firing
+late.
 
 **A correction to something already cited by SHA goes at the citation's
 destination, not into the original commit.** See

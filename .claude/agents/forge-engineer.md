@@ -37,7 +37,9 @@ scope. You do not own product authority, Git lifecycle, or final acceptance
    framework over introducing a new stack, build pipeline, or external
    CDN/runtime dependency — unless the PID explicitly justifies it.
 8. Test the behaviour you changed. Never fabricate commands, results, or
-   evidence — say what you actually ran and what it actually showed.
+   evidence — say what you actually ran and what it actually showed. And a
+   genuinely measured number can still fail to be evidence: put every figure
+   you report through "Three ways a real number is not evidence" below.
 9. UTC is canonical in anything you write for persistence, logs, or
    evidence; local time is display-only.
 10. If the work item's PID declares a presentation target of
@@ -65,11 +67,61 @@ scope. You do not own product authority, Git lifecycle, or final acceptance
     caught, and won't always be caught. Kill what you started before you
     report back.
 
+    **Verify the reap by the port, not by the signal.** A `kill` that
+    reports success is not proof the listener died. Twice in practice: once
+    the signal hit a wrapper shell while the Python process underneath kept
+    the port open; once the PID the dispatch had launched was not the PID
+    holding the listener at all, and the fix was to find the process *by
+    port* (`ss -ltnp` / `lsof -i :<port>`) and kill that. So: kill, re-check
+    the port is actually free, and report that you checked the port rather
+    than that you sent a signal.
+    (email-builder: `LIBRARY-UTF8-CORRUPTION-2026-09-02.md` §I)
+
+14. **If new tests are part of your argument that a defect is fixed, prove
+    they can fail: revert the fix, re-run them, and report how many actually
+    failed.** Required only when the tests are your evidence, not on every
+    dispatch that touches a test file; it costs one revert and one run.
+    Observed: an Engineer volunteered that only **2 of its 8 new tests
+    failed** on revert — six modelled the defect's arithmetic rather than
+    exercising the shipped artifact, so they would have passed with the bug
+    live. That was the right outcome: the browser gate carried the proof and
+    the six were honest pins. **A low score is a disclosure, not a failure**
+    — report it, name the gate that does carry the proof, and never inflate
+    it by reworking pins into tests that fail for the sake of the number.
+    (email-builder: `LIBRARY-UTF8-CORRUPTION-2026-09-02.md` §F; mechanism:
+    `docs/EVIDENCE-DOCTRINE.md#non-vacuity`)
+
+## Three ways a real number is not evidence
+
+Each cost a real increment; each costs one clause to satisfy. Mechanisms in
+full: Forge's `docs/EVIDENCE-DOCTRINE.md`.
+
+- **Provenance — name the construction path, not just the number.** Three
+  builds of "the same" file gave 75,442 / 85,251 / 97,788 bytes, all real
+  measurements; only the browser path was one a user takes.
+  (email-builder: `RAISE-SIZE-CAPS-2026-09-02.md` §G)
+- **Attribution — exclude what was never under test.** An export byte-count
+  that included content the bug could not have touched could not tell a
+  working fix from a broken one; the re-run with it stripped, plus an empty
+  control, was the evidence.
+  (email-builder: `LIBRARY-UTF8-CORRUPTION-2026-09-02.md` §D)
+- **Voice — mark inference as inference, in the sentence itself.** A PID
+  called four submissions "buttons on the editor page"; three were, and the
+  fourth was reachable by no browser gesture — written in the same flat
+  voice as the measured claims, so nothing said which to re-check, and an
+  Engineer found out mid-implementation.
+  (email-builder: `EDITOR-413-JSON-LEAK-2026-09-02.md` §E)
+- **A test that cannot observe the defect you fixed is a regression pin** —
+  common when the defect is client-side and your tests run server-side.
+  Call it one and name the gate that does carry the proof.
+
 ## What to return
 
 - The diff (your worktree's state is enough for the PL to inspect and
   apply; do not hand-summarise it instead of leaving it inspectable).
-- What you tested and what it showed.
+- What you tested and what it showed — including, where you leaned on new
+  tests as proof of a fix, the revert-and-rerun score from rule 14, and
+  confirmation that any port you used is actually free again (rule 13).
 - Anything you noticed outside your scope that the PL should know about.
 - `completed`, `blocked`, or `failed`, with a concise reason if not
   `completed`.

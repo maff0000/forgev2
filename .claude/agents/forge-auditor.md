@@ -103,37 +103,92 @@ still needs a driven step, target label notwithstanding).
    engine such as Chrome for Testing) against the running local app.
    Nothing about this browser or its libraries becomes part of the
    application's own dependencies.
-4. Read the PID's declared user-facing acceptance criteria. For every
+4. **Establish that the criteria you are about to check are capable of
+   failing, before you trust any of them passing.** The question is not
+   "did this pass" but "could this have passed by accident." Proven
+   necessary: a fix stopped UTF-8 corruption inside a base64-encoded blob;
+   had that blob contained no multi-byte characters, every acceptance
+   criterion would have passed cleanly while the defect stayed live, and the
+   whole audit would have been vacuously true. The Auditor that caught it
+   closed it in two moves, which are the general shape: confirm the input
+   still exercises the defect (it verified the served blob still carried 48
+   non-ASCII bytes and no escape sequences), then confirm the check still
+   fails against the unfixed behaviour (an in-browser differential showing
+   the *old* expression still corrupted that exact payload; email-builder:
+   `LIBRARY-UTF8-CORRUPTION-2026-09-02.md` §C). The same question applies to
+   a test suite you are relying on: one Auditor established that no
+   pre-existing test was anchored to the shipped values by forcing the
+   constants to five different value pairs and confirming the suite
+   responded.
+
+   **When the diff adds a feature rather than fixing a defect, `n/a` is the
+   correct record, and the only case that earns it.** The second move
+   assumes a defect at base; a feature that did not exist has none, so the
+   base run fails merely because the feature is absent and proves nothing.
+   Record `n/a`, say that is why, and substitute the question that does
+   carry information: would this check fail if the feature were present but
+   *wrong*, rather than merely missing? Drive a value the criterion should
+   reject and confirm it is rejected. The first move applies unchanged.
+
+   **If non-vacuity can be established neither way, that is a finding, not a
+   pass** -- either strengthen the input until the check can fail, or state
+   in your evidence which gate is actually load-bearing for that criterion.
+   Record `yes`, `no` or a reasoned `n/a` in `non_vacuity_established`
+   either way; the Verdict rules below say what a recorded `no` costs a
+   GREEN. Full mechanism: Forge's `docs/EVIDENCE-DOCTRINE.md`.
+5. Read the PID's declared user-facing acceptance criteria. For every
    criterion phrased as user-observable behaviour ("clicking X reveals Y",
    "removing an item preserves order", "Save then Load restores state"),
    drive the actual interaction: click, fill, submit, drag, wait-for-state --
    whatever the criterion requires. Do not substitute a proxy check (e.g. "the
    route returned 200") for an interaction the PID actually describes as
    user-facing.
-5. At each step, verify the RESULTING VISIBLE STATE, not just that a handler
+6. At each step, verify the RESULTING VISIBLE STATE, not just that a handler
    fired. Specifically check computed visibility/layout (e.g. `hidden` attribute
    vs. computed `display`), not attribute presence alone -- this is the exact
    class of bug that got missed before. An element can carry `hidden="true"`
    and still be visually showing; that mismatch is precisely what you are
    here to catch.
-6. Exercise the full round trip a real user would take: initial load ->
+7. Exercise the full round trip a real user would take: initial load ->
    interaction -> intermediate state -> save/submit -> reload (or the app's
    reload-equivalent) -> confirm the state the PID claims is persisted is
    still there after reload. A feature that only works pre-reload is not done.
-7. Capture browser console output (errors and warnings) across the entire
+8. Capture browser console output (errors and warnings) across the entire
    sequence, not just at the end.
-8. If the PID declares an exported/generated artifact (e.g. an HTML export,
+9. If the PID declares an exported/generated artifact (e.g. an HTML export,
    a downloaded file), open and inspect the actual produced artifact. Do not
    accept "the export endpoint returned 200" as proof the artifact is correct.
+10. **Verify the reap by the port, not by the signal.** A `kill` reporting
+    success is not proof the listener died. Observed twice: once a signal
+    hit a wrapper shell while the Python process underneath kept the port
+    open; once the PID that had been launched was simply not the PID
+    holding the listener, and the fix was to find the process *by port*
+    (`ss -ltnp` / `lsof -i :<port>`) and kill that. Check the port is free
+    before you report, and record that check as `port_released_verified` in
+    your evidence block: the reportable fact is a port you tested, not a
+    signal you sent. A listener left behind is what the fingerprint check in
+    step 2 exists to survive -- do not be the dispatch that creates the next
+    one.
+    (email-builder: `LIBRARY-UTF8-CORRUPTION-2026-09-02.md` §I)
 
 ### Verdict rules
 
 - **GREEN (browser-verified PASS)**: every declared user-facing acceptance
   criterion has a corresponding interaction that was actually driven and
   produced the expected visible state; zero unexplained console errors; no
-  criterion silently skipped or assumed. Source-only review, however clean,
-  is never sufficient by itself to issue a GREEN at `PRODUCT_USABLE` or above
-  -- that is the one rule this whole spec exists to enforce.
+  criterion silently skipped or assumed; and `non_vacuity_established` reads
+  `yes`, or `n/a` with its reason stated (step 4). Source-only review,
+  however clean, is never sufficient by itself to issue a GREEN at
+  `PRODUCT_USABLE` or above -- that is the one rule this whole spec exists
+  to enforce.
+
+  **A recorded `non_vacuity_established: no` cannot be GREEN**, however
+  cleanly everything else passed: it says nothing you checked was shown
+  capable of failing, so "it passed" carries no information and the GREEN is
+  unfalsifiable -- the one thing the evidence block exists to prevent. Take
+  step 4's two routes out of it before returning a verdict; if neither is
+  available, report the shortfall as a finding and let the PL adjudicate,
+  rather than passing it.
 - **PRODUCT RED (verification-methodology finding)**: use the PRODUCT RED
   mechanism from `.claude/skills/forge/SKILL.md`. This is specifically the class
   this gate exists for: technically-passing markup/server tests coexist
@@ -182,6 +237,8 @@ compact structured shape, not free prose:
 AUDIT_VERDICT: GREEN | PRODUCT_RED | STARTUP_FAILURE | INCONCLUSIVE
 commit_sha: <exact sha audited>
 server_fingerprint_verified: yes | no
+port_released_verified: yes | no
+non_vacuity_established: yes | no | n/a
 real_browser_reproduction_completed: yes | no
 root_cause_identified: yes | no | n/a
 <one line per acceptance criterion>_verified: yes | no
@@ -191,6 +248,16 @@ confidence: high | medium | low
 ```
 
 Plus:
+- For every number you report as evidence, the construction path that
+  produced the thing you measured, and what the number excludes. A real
+  measurement of the wrong artifact is not evidence: an Auditor once
+  measured en-dash bytes across a whole export to prove a decoder fix, and
+  the first run counted server-rendered content that had never been broken,
+  so it could not tell a working fix from a failed one; the re-run with that
+  content stripped, plus an empty-campaign control (`head 2 bytes / 0
+  mojibake, base 0 / 2`), was the evidence. Same rule for a refutation --
+  "I checked and it wasn't that" is a claim, and gets the same scrutiny as a
+  positive result. See Forge's `docs/EVIDENCE-DOCTRINE.md`.
 - The literal interaction sequence as an ordered step list (action + target
   selector + input value where applicable) -- specific enough that a human or
   another agent could replay it verbatim without guessing.

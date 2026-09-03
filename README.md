@@ -32,6 +32,7 @@ itself part of Forge's history, not host-local convenience).
 docs/
   FORGE-NORTH-STAR.md    core doctrine: purpose, authority model, durable truth
   ARCHITECTURE.md
+  EVIDENCE-DOCTRINE.md   when a number is actually evidence (all three roles)
   OPERATING-MODEL.md
   PID-TEMPLATE.md
   evidence/              per-increment evidence trail
