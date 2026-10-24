@@ -1,6 +1,6 @@
 # ForgeV2 — Project Initiation Mandate
 
-**Record:** FORGEV2-INIT-001 · **Route:** EXISTING · **Draft:** v0.2, 2026-10-24 · **Author:** CGPT Project Architect · **Stage 1 status:** CLOSED GREEN by CGPT at exact baseline `28d69381355eb6979b302d36cc71320f55e8b56f`; [acceptance is recorded in Issue #1](https://github.com/maff0000/forgev2/issues/1#issuecomment-6387428447).
+**Record:** FORGEV2-INIT-001 · **Route:** EXISTING · **Revision:** v0.2 (accepted), 2026-10-24 · **Author:** CGPT Project Architect · **Stage 1 status:** CLOSED GREEN by CGPT at exact baseline `28d69381355eb6979b302d36cc71320f55e8b56f`; [acceptance is recorded in Issue #1](https://github.com/maff0000/forgev2/issues/1#issuecomment-6387428447).
 
 **Governing FOUNDRY revision used for this initiation:** [`aee86185aac6aa0d2ab7a243138c423292af191a`](https://github.com/maff0000/foundry/commit/aee86185aac6aa0d2ab7a243138c423292af191a), including FND-044 engine/application isolation. This identifies the verified framework baseline used at initiation, not a claim about a later `main` head. Matt authorised preparation of initiation records; that authority did not itself approve those records or authorise ForgeV2 implementation.
 
