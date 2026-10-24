@@ -1,0 +1,47 @@
+# ForgeV2 project-specific external software register — initiation coverage snapshot.
+# This is an observed-scope record, not a dependency approval or an SBOM.
+project: ForgeV2
+record_status: candidate
+observed_repository:
+  url: https://github.com/maff0000/forgev2
+  revision: 665b32c991caaace95710abd22af6d4c97eefc3b
+coverage:
+  status: incomplete
+  basis: >-
+    Existing ForgeV1 baseline was inventoried at a high level, not completely
+    examined for incorporated source, scripts, transitive dependencies or
+    licences. Absence of registered components is not evidence of absence.
+  known_gaps:
+    - Full tracked-source and build/install dependency inventory has not been independently reconciled.
+    - Third-party licence and supply-chain review evidence has not been produced.
+    - No current ForgeV2 software bill of materials has been generated.
+    - The engine's eventual runtime and plugin packaging are not implemented.
+incorporated_components_verified: []
+external_runtime_or_development_tools_observed:
+  - name: Claude Code
+    version_reported: 2.1.310
+    role: external agent runtime used in disposable plugin experiment
+    repository_incorporation: false
+    licence_and_supply_chain_assessment: pending
+    approval: not_established_by_this_record
+  - name: Git
+    version_reported: 2.39.5
+    role: development host Git tool
+    repository_incorporation: false
+    licence_and_supply_chain_assessment: pending
+    approval: not_established_by_this_record
+  - name: gitleaks
+    version_reported: unknown_not_installed_at_preflight
+    role: required by inherited ForgeV1 bootstrap and committed Git hook
+    repository_incorporation: false
+    licence_and_supply_chain_assessment: pending
+    approval: not_established_by_this_record
+security_approvals_recorded: []
+approved_exceptions_recorded: []
+next_required_action: >-
+  Independently inspect the inherited code and operational prerequisites,
+  identify any incorporated externally sourced components and relevant
+  transitive dependencies, and update this register with actual provenance,
+  use locations, licensing, security evidence and approvals before accepting
+  coverage as complete. Do not execute unassessed legacy scripts merely to
+  discover dependencies.
