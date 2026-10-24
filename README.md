@@ -16,12 +16,13 @@ This documentation candidate is written for a currently public repository. It de
 - [ForgeV2 decisions](DECISIONS.md) — project-specific direction and clearly distinguished unimplemented mechanisms.
 - [External software register](security/EXTERNAL_CODE_REGISTER.yaml) — incomplete baseline coverage, no invented approval.
 - [Engine-loading experiment](docs/evidence/ENGINE-LOADING-SPIKE-001.md) — reported disposable experiment and its limits.
+- [Stage 1 environment reconciliation](docs/evidence/STAGE1-ENVIRONMENT-RECONCILIATION-001.md) — approved workspace boundaries and attributed verification status.
 
 [Initiation GitHub Issue #1](https://github.com/maff0000/forgev2/issues/1) was verified OPEN against this assignment, scope and starting baseline before this candidate was prepared. This Stage 1 review branch carries the exact Issue reference; it does not authorize specialist dispatch or ForgeV2 implementation. **Do not run inherited ForgeV1 bootstrap scripts, install/upgrade the engine or merge without separate authority.**
 
 ## Engine/application separation
 
-ForgeV2 is a tool used by other projects. Its eventual installed release and application workspaces must remain distinct. On the nominated VPS, `/srv/forgev2/` is the proposed protected engine installation; `/srv/pacman/main/` and `/srv/pacman/worktrees/` are the separately governed proposed PACMAN application paths. None existed at the latest read-only inventory. ForgeV2's **own code development** also requires a separately chosen, verified workspace, not implementation edits to its protected installed release. These are deployment examples, not global FOUNDRY defaults.
+ForgeV2 is a tool used by other projects. Its installed release and application workspaces remain distinct. The approved deployment layout places ForgeV2 source under `/srv/src/forgev2/`, with `/srv/src/forgev2/main/` as its canonical source checkout and `/srv/src/forgev2/worktrees/` reserved for engine-development worktrees. The protected engine installation is `/srv/forgev2/`; PACMAN owns the independent application root `/srv/pacman/`. These are deployment-specific decisions, not global FOUNDRY defaults. Claude reports that the source checkout and worktrees directory are present and that the protected engine and PACMAN locations were left untouched; this report has not been independently verified. Network perimeter security is managed by the infrastructure provider, and no host firewall installation is required. Environment and security readiness remain pending; see the [reconciliation evidence](docs/evidence/STAGE1-ENVIRONMENT-RECONCILIATION-001.md).
 
 ## Inherited ForgeV1 baseline (preserved)
 
