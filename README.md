@@ -4,15 +4,15 @@ ForgeV2 is Matt Scott's internal, portable AI software-delivery engine, evolving
 
 This documentation candidate is written for a currently public repository. It deliberately does **not** publish operator-specific host identities, access configuration or security findings. Those are maintained under restricted operational review; deployment security is not yet approved. A public-safe draft is not permission to release secrets or private infrastructure reports.
 
-**Current verified state:** This repository's `main` inherits the ForgeV1 baseline at `665b32c991caaace95710abd22af6d4c97eefc3b`. **ForgeV2 roles, plugin packaging, enforcement and runtime are not implemented or accepted.** Initiation documents are review candidates until Matt and CGPT approve their exact committed versions. Operational ForgeV1 is a different repository and must not be changed by this initiation.
+**Current status:** The ForgeV1 source import baseline verified when ForgeV2 initiation began was `665b32c991caaace95710abd22af6d4c97eefc3b`; this is historical baseline provenance, not a claim about the current `main` head. **ForgeV2 roles, plugin packaging, enforcement and runtime are not implemented or accepted.** Matt approved `PRODUCT-VISION.md` and `PRODUCT-BACKLOG.md` at exact commit [`071426b4cf2b39c39e6e6dd5be619e8afd06d8cb`](https://github.com/maff0000/forgev2/commit/071426b4cf2b39c39e6e6dd5be619e8afd06d8cb), recorded in [Issue #1 approval comment](https://github.com/maff0000/forgev2/issues/1#issuecomment-6386137638). The environment reconciliation is a **review candidate**; Stage 1 closure is **PENDING**; engineering implementation is **NOT AUTHORISED**. Operational ForgeV1 is a different repository and must not be changed by this initiation.
 
 **Governing framework:** [FOUNDRY](https://github.com/maff0000/foundry) at `aee86185aac6aa0d2ab7a243138c423292af191a` (Stage 1 v0.4 and Amendments 001–005). FOUNDRY supplies role authority, product-record standards, secure engineering and Work Order gates; ForgeV2 supplies delivery capability once implemented.
 
 ## Authoritative project records
 
 - [Project Initiation Mandate](PROJECT-INITIATION-MANDATE.md) — existing-project reconciliation, verified/pending environment, and **bounded initiation authority only**.
-- [Product Vision](PRODUCT-VISION.md) — intended value, goal, constraints, risks and exact-version approval state.
-- [Initial Product Backlog](PRODUCT-BACKLOG.md) — candidate capabilities and priorities, **not authorised Work Orders**.
+- [Product Vision](PRODUCT-VISION.md) — approved at exact commit `071426b4cf2b39c39e6e6dd5be619e8afd06d8cb`.
+- [Initial Product Backlog](PRODUCT-BACKLOG.md) — approved at exact commit `071426b4cf2b39c39e6e6dd5be619e8afd06d8cb`; its items are **not authorised Work Orders**.
 - [ForgeV2 decisions](DECISIONS.md) — project-specific direction and clearly distinguished unimplemented mechanisms.
 - [External software register](security/EXTERNAL_CODE_REGISTER.yaml) — incomplete baseline coverage, no invented approval.
 - [Engine-loading experiment](docs/evidence/ENGINE-LOADING-SPIKE-001.md) — reported disposable experiment and its limits.

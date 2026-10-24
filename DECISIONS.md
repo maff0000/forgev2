@@ -2,11 +2,11 @@
 
 **Draft:** v0.2 · 2026-10-24 · **Status:** initiation candidate, not an implemented contract. FOUNDRY at `aee86185aac6aa0d2ab7a243138c423292af191a` remains the governing framework; these are project-specific interpretations and proposed implementation decisions, not changes to FOUNDRY.
 
-Matt explicitly supported the direction to document the experiment-backed design and initiate ForgeV2 in conversation on 2026-10-24. The exact committed document versions and initial Product Vision/Backlog still require separate review and approval evidence.
+Matt approved `PRODUCT-VISION.md` and `PRODUCT-BACKLOG.md` at exact commit [`071426b4cf2b39c39e6e6dd5be619e8afd06d8cb`](https://github.com/maff0000/forgev2/commit/071426b4cf2b39c39e6e6dd5be619e8afd06d8cb); the approval is recorded in [Issue #1](https://github.com/maff0000/forgev2/issues/1#issuecomment-6386137638). That approval applies to those exact artifacts only. The environment reconciliation remains a review candidate, Stage 1 closure is **PENDING**, and engineering implementation is **NOT AUTHORISED**.
 
 | ID | Decision / state | Evidence and limits |
 | --- | --- | --- |
-| FV2-D001 | **Agreed direction:** Evolve a distinct ForgeV2 repository, preserving deployed ForgeV1 and its working PL/Engineer/Auditor behaviours. | ForgeV2 baseline `665b32c...`; no accepted V2 implementation. |
+| FV2-D001 | **Agreed direction:** Evolve a distinct ForgeV2 repository, preserving deployed ForgeV1 and its working PL/Engineer/Auditor behaviours. | ForgeV2 source import baseline verified when initiation began: `665b32c...`; this is historical baseline provenance. No accepted V2 implementation. |
 | FV2-D002 | **Candidate technical design:** Run ForgeV2 as a versioned external Claude Code plugin, with delivery sessions launched in the application's own approved worktree. | Dummy plugin tests T1–T5 passed as reported; no V2 packaging or deployment yet. |
 | FV2-D003 | **Candidate technical design:** The PL explicitly creates sibling application worktrees using Git; the initial V2 flow must not rely on Claude's automatic `isolation: worktree`. | Dummy tests T6/T7 identified path conflict; full V1-to-V2 PL adaptation still unverified. |
 | FV2-D004 | **Approved boundary, enforcement pending:** Engine installation and application project roots are separate. No application WO may write engine files. | FOUNDRY FND-044; dummy deny/hash tests T8/T9; root can still bypass tool-level controls. |
