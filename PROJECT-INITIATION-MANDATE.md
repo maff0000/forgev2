@@ -1,10 +1,10 @@
 # ForgeV2 — Project Initiation Mandate
 
-**Record:** FORGEV2-INIT-001 · **Route:** EXISTING · **Draft:** v0.2, 2026-10-24 · **Author:** CGPT Project Architect · **Status:** CANDIDATE, not yet Stage 1 accepted
+**Record:** FORGEV2-INIT-001 · **Route:** EXISTING · **Draft:** v0.2, 2026-10-24 · **Author:** CGPT Project Architect · **Stage 1 status:** CLOSED GREEN by CGPT at exact baseline `28d69381355eb6979b302d36cc71320f55e8b56f`; [acceptance is recorded in Issue #1](https://github.com/maff0000/forgev2/issues/1#issuecomment-6387428447).
 
 **Governing FOUNDRY revision used for this initiation:** [`aee86185aac6aa0d2ab7a243138c423292af191a`](https://github.com/maff0000/foundry/commit/aee86185aac6aa0d2ab7a243138c423292af191a), including FND-044 engine/application isolation. This identifies the verified framework baseline used at initiation, not a claim about a later `main` head. Matt authorised preparation of initiation records; that authority did not itself approve those records or authorise ForgeV2 implementation.
 
-**Current status:** Product direction is **APPROVED**. Matt approved the Product Vision and Product Backlog at exact commit [`071426b4cf2b39c39e6e6dd5be619e8afd06d8cb`](https://github.com/maff0000/forgev2/commit/071426b4cf2b39c39e6e6dd5be619e8afd06d8cb), as recorded in [Issue #1](https://github.com/maff0000/forgev2/issues/1#issuecomment-6386137638). Their status notes describe the state when those artifacts were written, before this later approval; the approved artifact contents remain unchanged. This Stage 1 closure assessment is a **CANDIDATE FOR CGPT REVIEW**, not an accepted closure. Stage 1 remains **OPEN**. Engineering workloads are **NOT AUTHORISED**.
+**Current status:** FOUNDRY Stage 1 is **CLOSED GREEN** at the exact baseline above. CGPT's acceptance comment records that all Stage 1 exit criteria are satisfied and identifies mandatory downstream delivery gates. Product direction remains approved: Matt approved the Product Vision and Product Backlog at exact commit [`071426b4cf2b39c39e6e6dd5be619e8afd06d8cb`](https://github.com/maff0000/forgev2/commit/071426b4cf2b39c39e6e6dd5be619e8afd06d8cb), as recorded in [Issue #1](https://github.com/maff0000/forgev2/issues/1#issuecomment-6386137638). Those immutable artifacts retain their status text from when they were written; the later approval applies to those exact versions. No ForgeV2 engineering implementation has started, and no engineering Work Order has been approved. Stage 1 closure does **not** authorise implementation.
 
 ## Purpose and current truth
 
@@ -12,7 +12,7 @@ ForgeV2 is the next, portable version of Matt's internal AI engineering delivery
 
 **Existing code:** The initial [`maff0000/forgev2`](https://github.com/maff0000/forgev2) import baseline was `665b32c991caaace95710abd22af6d4c97eefc3b`, an inherited 26-commit ForgeV1 baseline, **not a functioning ForgeV2 release**. At closure-candidate preparation, GitHub `main` and the canonical source checkout were independently verified at `6da78603478093ff799a2aa70c83a6fdc0d328c3` after a controlled fast-forward. Operational ForgeV1 at `maff0000/forge` is separately protected. The inherited `PID.md`, original `.claude/` roles, PL doctrine, tests and evidence remain historical/compatibility input, not silently rewritten into new authority.
 
-**Project record state:** The Product Vision and initial Product Backlog are approved at the exact version above. The project README, this PIM, and initiation evidence are preserved in the repository; the current closure assessment is still a review candidate. The external-code register exists and truthfully reports incomplete coverage. [FORGEV2-INIT-001 GitHub Issue #1](https://github.com/maff0000/forgev2/issues/1) is the initiation authority and records Product Owner approval; no engineering Work Order is approved. Project-specific records belong in this repository, not in FOUNDRY.
+**Project record state:** The Product Vision and initial Product Backlog are approved at the exact version above. The README, this PIM and initiation evidence are preserved in the repository. CGPT accepted Stage 1 CLOSED GREEN at exact baseline `28d69381355eb6979b302d36cc71320f55e8b56f` in [Issue #1](https://github.com/maff0000/forgev2/issues/1#issuecomment-6387428447). The external-code register exists and truthfully reports incomplete coverage. No engineering Work Order has been approved. Project-specific records belong in this repository, not in FOUNDRY.
 
 ## Product direction
 
@@ -59,11 +59,11 @@ The Mac Codex staging operator may be separately authorised for Git writes durin
 
 ## Review and exit
 
-### Stage 1 exit-gate assessment
+### Stage 1 exit-gate assessment at the accepted baseline
 
-This is a candidate assessment for CGPT review under [FOUNDRY Stage 1](https://github.com/maff0000/foundry/blob/aee86185aac6aa0d2ab7a243138c423292af191a/stages/01-product-discovery.md#exit-gate) and the [product record standard](https://github.com/maff0000/foundry/blob/aee86185aac6aa0d2ab7a243138c423292af191a/standards/product-records.md). “Met” below records available evidence; it is not Architect acceptance of Stage 1 closure.
+The table records the closure assessment at baseline `28d69381355eb6979b302d36cc71320f55e8b56f` under [FOUNDRY Stage 1](https://github.com/maff0000/foundry/blob/aee86185aac6aa0d2ab7a243138c423292af191a/stages/01-product-discovery.md#exit-gate) and the [product record standard](https://github.com/maff0000/foundry/blob/aee86185aac6aa0d2ab7a243138c423292af191a/standards/product-records.md). Its “closure review pending” labels describe the pre-acceptance assessment. CGPT subsequently accepted all FOUNDRY Stage 1 exit criteria as satisfied in the [Issue #1 closure comment](https://github.com/maff0000/forgev2/issues/1#issuecomment-6387428447).
 
-| FOUNDRY exit criterion | Candidate status | Evidence |
+| FOUNDRY exit criterion | Status at pre-acceptance assessment | Evidence |
 | --- | --- | --- |
 | 1. Problem or opportunity understood | MET | Product Vision, “Opportunity and beneficiaries,” approved at exact commit `071426b4cf2b39c39e6e6dd5be619e8afd06d8cb`. |
 | 2. Intended product value clear | MET | Product Vision, “Value and outcomes,” same approved commit. |
@@ -79,12 +79,12 @@ This is a candidate assessment for CGPT review under [FOUNDRY Stage 1](https://g
 
 ### Cross-cutting Stage 1 evidence and outstanding gates
 
-- **Product security context:** Recorded in the approved Product Vision and this PIM, including trust boundaries, deployment assumptions, risk, and external-code expectations. CGPT's closure-level review remains pending.
-- **External software register:** `security/EXTERNAL_CODE_REGISTER.yaml` exists and reports `coverage.status: incomplete`, with known gaps. Its inventory snapshot is based on ForgeV1 source import commit `665b32c991caaace95710abd22af6d4c97eefc3b`; the documentation-only sync did not perform a new dependency inventory. No complete coverage, SBOM, dependency approval, or supply-chain assessment is claimed. CGPT must assess whether the recorded gaps are compatible with Stage 1 closure.
+- **Product security context:** Recorded in the approved Product Vision and this PIM, including trust boundaries, deployment assumptions, risks and external-code expectations. CGPT's later acceptance confirms the Stage 1 exit criteria were satisfied with the remaining delivery gates explicitly deferred.
+- **External software register:** `security/EXTERNAL_CODE_REGISTER.yaml` exists and reports `coverage.status: incomplete`, with known gaps. Its inventory snapshot is based on ForgeV1 source import commit `665b32c991caaace95710abd22af6d4c97eefc3b`; the documentation-only sync did not perform a new dependency inventory. No complete coverage, SBOM, dependency approval, or supply-chain assessment is claimed. The closure comment defers assessment of unassessed components until before their execution; the incomplete inventory is not represented as complete.
 - **Infrastructure and source availability:** Codex independently verified the authorized workspace and completed the controlled fast-forward. The sanitized evidence and exact resulting source baseline are in [STAGE1-ENVIRONMENT-RECONCILIATION-001](docs/evidence/STAGE1-ENVIRONMENT-RECONCILIATION-001.md). No host-specific access details are reproduced here.
 - **Security readiness for real delivery:** PENDING. Real engineering workloads require a non-root delivery identity or equivalent enforceable engine protection, appropriately scoped credentials, and reviewed host-security evidence. The approved IONOS-managed network perimeter remains in force; no host-firewall installation is required. The read-only source verification does not establish runtime isolation or operational security acceptance.
 - **Delivery authority:** No engineering Work Order is approved. Product direction approval and any eventual Stage 1 closure do not authorize implementation. A separate approved Work Order and applicable FOUNDRY process are required before engineering work.
 
-**Closure recommendation:** This document records a Stage 1 closure candidate, not a closure decision. Stage 1 remains **OPEN** until CGPT accepts the full assessment and any required gates are resolved or explicitly determined non-blocking. Engineering implementation remains **NOT AUTHORISED**.
+**Formal closure record:** CGPT accepted FOUNDRY Stage 1 **CLOSED GREEN** at exact baseline `28d69381355eb6979b302d36cc71320f55e8b56f` in [Issue #1](https://github.com/maff0000/forgev2/issues/1#issuecomment-6387428447). This status update records that later acceptance without changing the approved Product Vision, Product Backlog or historical assessment evidence. No ForgeV2 engineering implementation has started; no engineering Work Order has been approved. Engineering implementation remains **NOT AUTHORISED** until a separate Work Order is approved and mandatory delivery gates are met.
 
 Following accepted initiation, ForgeV2 engineering requires a separately versioned, approved WO under the FOUNDRY Work Order contract and Orchestrator→PL delegation. Candidate first engineering increment: plugin packaging preserving ForgeV1 PL/Engineer/Auditor behaviour; it is **not authorised by this PIM**. Unresolved Orchestrator launch, runtime isolation, version pinning, worktree routing and release-promotion mechanics remain explicit design work.
