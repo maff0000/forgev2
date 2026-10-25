@@ -4,25 +4,25 @@
 **Parent PBI:** `FV2-001` — prerequisite work only; this does not implement the product capability
 **Repository:** `maff0000/forgev2`
 **Work Order artifact:** `work-orders/FORGEV2-ACCESS-BOOTSTRAP-001.md`
-**GitHub tracking Issue:** Not yet assigned. Issue #2 is for ENGINE-PACKAGING-001 and is not this Work Order's tracking issue. A dedicated Issue URL is required before exact-version approval and execution.
+**GitHub tracking Issue:** [Issue #3](https://github.com/maff0000/forgev2/issues/3).
 **Documentation baseline:** `519b2f7559650614d25b5f16cdefdcbeea6bbc09`
 **Governing FOUNDRY:** `aee86185aac6aa0d2ab7a243138c423292af191a`
 **Applicable FOUNDRY sources:** [Work Order contract](https://github.com/maff0000/foundry/blob/aee86185aac6aa0d2ab7a243138c423292af191a/standards/work-order-contract.md), [secure engineering standard](https://github.com/maff0000/foundry/blob/aee86185aac6aa0d2ab7a243138c423292af191a/standards/secure-engineering.md), and [Security by Design skill reference](https://github.com/maff0000/foundry/blob/aee86185aac6aa0d2ab7a243138c423292af191a/skills/security-by-design.md)
 **Related decisions:** `FV2-D017` through `FV2-D021` in [DECISIONS.md](../DECISIONS.md)
 **Authoritative access design:** [security/ACCESS_CONTROL.md](../security/ACCESS_CONTROL.md)
-**Exact-version approval:** Pending; record the approved artifact SHA on the dedicated Issue after this artifact commit exists.
+**Exact-version approval:** Pending; record the approved artifact SHA on [Issue #3](https://github.com/maff0000/forgev2/issues/3) after this artifact commit exists.
 
 ## 1. Purpose and authority
 
 Establish only the initial non-root ForgeV2 service identities and the approved filesystem access boundary needed for later, separately authorized delivery. This is one controlled administrative change on the previously approved ForgeV2 development environment. It does not start ForgeV2, Claude Code, a plugin, an application, or an engineering Work Order.
 
-Matt Scott is the designated administrator and sole privileged operator for this Work Order. CGPT Project Architect is the independent verifier of the recorded evidence and retains architectural acceptance. Matt retains product and operational-risk authority. Any exact-version approval must be explicit and recorded on this Work Order's dedicated GitHub Issue; this document's presence or branch does not authorize execution.
+Matt Scott is the designated administrator and sole privileged operator for this Work Order. CGPT Project Architect is the independent verifier of the recorded evidence and retains architectural acceptance. Matt retains product and operational-risk authority. Any exact-version approval must be explicit and recorded on this Work Order's GitHub Issue at [Issue #3](https://github.com/maff0000/forgev2/issues/3); this document's presence or branch does not authorize execution.
 
 The current approved design is recorded in `FV2-D017`–`FV2-D021`: named-human identity direction; the two proposed service accounts; root reserved for administration; non-root engineering; manual bootstrap boundary and deferred autonomous cross-UID dispatch; and filesystem/credential controls not yet verified. Preserve those states. Do not report a proposed or fixture-tested control as effective on the VPS until the VPS check succeeds.
 
 ## 2. Target and verified starting conditions
 
-- **Repository identity:** `maff0000/forgev2`; this Work Order's approved source revision is the exact-version-approved commit recorded on its dedicated Issue.
+- **Repository identity:** `maff0000/forgev2`; this Work Order's approved source revision is the exact-version-approved commit recorded on [Issue #3](https://github.com/maff0000/forgev2/issues/3).
 - **Source checkout:** `/srv/src/forgev2/main/`; **worktree parent:** `/srv/src/forgev2/worktrees/`. These are approved deployment-specific project paths, not global FOUNDRY defaults.
 - **Administrative target:** The previously approved ForgeV2 development VPS. Its current host identity and access details are restricted operator evidence and must be reverified by Matt at execution. Do not place a hostname, IP, SSH alias, key fingerprint or access configuration in this public Work Order.
 - **Expected VPS source-checkout HEAD:** `6671ef8e2558aede02a812dca4be7c8fd3dbd86a`, the last controlled source-sync result. This is a required starting baseline to reverify, not a claim that the VPS still has it. The repository's public documentation `main` has since advanced to this Work Order's documentation base; do not fetch or fast-forward the VPS during this administrative change. At execution, record repository identity, branch, exact HEAD, origin identity, cleanliness, registered worktrees and target ownership/modes in restricted pre-change evidence. If any differ from the listed expected execution state, stop for CGPT review; do not fetch, pull, reset, retarget or repair as part of this WO.
@@ -30,7 +30,7 @@ The current approved design is recorded in `FV2-D017`–`FV2-D021`: named-human 
 - **Protected paths:** `/srv/forgev2/` and `/srv/pacman/` must remain untouched. Their present state is not assumed; verify absence or record their actual state without reading sensitive contents. Do not create either path.
 - **Current root administration:** Preserve Matt's existing root SSH access. Do not change SSH, keys, authorized-key files, firewall, users outside this WO, or IONOS settings. Verify a separate Matt administrative connection before and after the operation without publishing its details.
 
-The exact GitHub tracking Issue and current VPS identity are unresolved at draft time. Both are entry gates, not values to infer.
+The current VPS identity is unresolved at draft time and remains an entry gate, not a value to infer. Use [Issue #3](https://github.com/maff0000/forgev2/issues/3) as the Work Order tracking and approval record.
 
 ## 3. Scope
 
@@ -69,7 +69,7 @@ No external human accounts; no SSH, firewall, credential, GitHub security, packa
 
 - **Administrator/operator:** Matt Scott. Performs the small, explicitly authorized root operations and records each command and result in the restricted administrator evidence.
 - **Independent verifier:** CGPT Project Architect. Does not run the root commands; independently reviews sanitized before/after evidence and the positive/negative test results before acceptance.
-- **Independent assurance:** CGPT must name the Auditor, Tester and DevSecOps assessors, with their identities and read/write boundaries, on the dedicated Issue before execution. Auditor independently reviews state and change evidence; Tester independently repeats the fixture and access tests; DevSecOps assesses the account, filesystem and credential boundaries. No reviewer may be silently omitted.
+- **Independent assurance:** CGPT must name the Auditor, Tester and DevSecOps assessors, with their identities and read/write boundaries, on [Issue #3](https://github.com/maff0000/forgev2/issues/3) before execution. Auditor independently reviews state and change evidence; Tester independently repeats the fixture and access tests; DevSecOps assesses the account, filesystem and credential boundaries. No reviewer may be silently omitted.
 - **Engineer:** Not applicable to the authorized work because it changes only OS identities/permissions and contains no product or engine source implementation. CGPT must explicitly approve this role's inapplicability when approving the exact WO version.
 - **PL:** The new `forgev2-pl` identity is a target of this bootstrap, not an assumed installed ForgeV2 PL runtime. Matt coordinates this one manual administrative change; this does not create autonomous PL-to-agent dispatch. PL-only Git authority is proved against a local fixture, not exercised against GitHub.
 - **Specialist execution limits:** No ForgeV2 specialist agent is dispatched by this WO. Any independent review performed by an AI specialist remains subject to FOUNDRY's independent limit of four executions per specialist for this WO, including the first; fifth is prohibited, counts persist across resets, and exhaustion is FAIL with reason/evidence. The PL normally owns persisted specialist counters. As no operational PL exists yet, CGPT must resolve who holds that record before any AI reviewer is invoked; do not silently transfer that authority to the administrator.
@@ -92,7 +92,7 @@ These invocations intentionally start separate non-login shells. The agent envir
 
 Before any change, Matt records evidence that all gates pass:
 
-1. A dedicated GitHub Issue exists for this WO and links this exact artifact path; the Issue is not #2. The reviewed commit SHA and explicit CGPT decision are recorded after the candidate commit exists. No self-referential SHA is embedded here.
+1. [Issue #3](https://github.com/maff0000/forgev2/issues/3) links this exact artifact path. The reviewed commit SHA and explicit CGPT decision are recorded after the candidate commit exists. No self-referential SHA is embedded here.
 2. The live GitHub `main`, candidate branch, repository identity, exact base, ancestry, clean working tree and changed-path scope have been verified. This execution uses the exact approved WO version; any later edit requires renewed approval.
 3. Matt verifies the actual authorized VPS identity and access through the restricted operator record. The canonical checkout is the intended repository and path, its branch/HEAD/remote/working tree/worktree list are captured, and no user data or unexpected contents would be overwritten.
 4. Current account/group state confirms both service account names and homes are unused, no conflicting UID/GID or group membership exists, and no unapproved sudo policy grants either identity privilege.
@@ -172,7 +172,7 @@ The last operation does not install an engine, create a human account, authorize
 
 ## 8. Logs, evidence and communication
 
-Use the dedicated Issue once created for sanitized status and approval provenance. Public repository records must not contain host identity/access data or restricted evidence. All WO-specific logs are created only under `/var/log/forgev2-access-bootstrap-001/logs/`, outside `/srv/src/forgev2/main/` and `/srv/forgev2/`. Matt creates the log directory as `root:root` mode `0700`; log files are `root:root` mode `0600`. If the directory exists before this WO, stop rather than reuse it. Create the evidence directory only after final production verification, at `/var/log/forgev2-access-bootstrap-001/evidence/`, with owner `root:root` mode `0700`. No log, manifest, or test artifact may be written into the canonical checkout or engine installation.
+Use [Issue #3](https://github.com/maff0000/forgev2/issues/3) for sanitized status and approval provenance. Public repository records must not contain host identity/access data or restricted evidence. All WO-specific logs are created only under `/var/log/forgev2-access-bootstrap-001/logs/`, outside `/srv/src/forgev2/main/` and `/srv/forgev2/`. Matt creates the log directory as `root:root` mode `0700`; log files are `root:root` mode `0600`. If the directory exists before this WO, stop rather than reuse it. Create the evidence directory only after final production verification, at `/var/log/forgev2-access-bootstrap-001/evidence/`, with owner `root:root` mode `0700`. No log, manifest, or test artifact may be written into the canonical checkout or engine installation.
 
 - `ADMIN.log` — Matt authors and writes the administrative command/results record; CGPT reads.
 - `PL.log` — no PL agent/runtime is dispatched. Matt records `PL not dispatched; specialist invocation count zero` and the administrative coordination state. This is not represented as a PL-authored delivery log or a transfer of PL authority. CGPT/Matt read.
@@ -180,7 +180,7 @@ Use the dedicated Issue once created for sanitized status and approval provenanc
 - `TESTER.log` — the appointed independent Tester authors the fixture and independent verification results; Matt stores the reviewer-supplied record verbatim and records its source/identity, receipt time and digest. CGPT/Matt read.
 - `DEVSECOPS.log` — the appointed independent DevSecOps reviewer authors the security assessment; Matt stores the reviewer-supplied record verbatim and records its source/identity, receipt time and digest. CGPT/Matt read.
 
-No Engineer log is applicable because Engineer is not dispatched. Detailed pre/post host manifests and any restricted security data remain in Matt's restricted operator evidence store; do not publish its location or contents. The frozen evidence manifest described in §7 and its referenced restricted files are read-only during review. Its SHA-256 is the single Administrative Candidate ID recorded in each reviewer log and the dedicated Issue. Reviewer reports are separate records and do not change that candidate. Any subsequent account or permission change creates a new candidate identity and invalidates all prior PASS results.
+No Engineer log is applicable because Engineer is not dispatched. Detailed pre/post host manifests and any restricted security data remain in Matt's restricted operator evidence store; do not publish its location or contents. The frozen evidence manifest described in §7 and its referenced restricted files are read-only during review. Its SHA-256 is the single Administrative Candidate ID recorded in each reviewer log and on [Issue #3](https://github.com/maff0000/forgev2/issues/3). Reviewer reports are separate records and do not change that candidate. Any subsequent account or permission change creates a new candidate identity and invalidates all prior PASS results.
 
 ## 9. Acceptance criteria
 
@@ -189,10 +189,10 @@ CGPT may accept completion only when all applicable items have independently ver
 1. Exactly the two approved system identities exist with unique dynamically allocated IDs, private primary groups/homes, `nologin`, no password and no sudo; no human identity was created.
 2. The fixture proves PL Git write authority, Engineer assigned-worktree source writes, `.git` pointer/metadata protection, PL credential denial to Engineer, and cross-directory denial, with every positive and negative result recorded.
 3. Matt's separate root administrative SSH access succeeds before and after; no SSH/firewall/credential changes occurred.
-4. On the actual host, only the approved targets changed: service account/home/group state; ownership within `/srv/src/forgev2/main/.git`; owner/mode of `/srv/src/forgev2/worktrees`. No tracked source content changed, no worktree was created, and `/srv/forgev2/` and `/srv/pacman/` were untouched.
+4. On the actual host, only the approved targets changed: service account/home/group state; ownership within `/srv/src/forgev2/main/.git`; owner/mode of `/srv/src/forgev2/worktrees`; and the restricted `/var/log/forgev2-access-bootstrap-001/evidence/` directory. No tracked source content changed, no worktree was created, and `/srv/forgev2/` and `/srv/pacman/` were untouched.
 5. PL and Engineer command processes ran as distinct UIDs with the declared clean environment; Engineer could not read the synthetic PL credential marker or reach PL credential files.
 6. CGPT-appointed Auditor, Tester and DevSecOps reviewers report PASS against the same unchanged administrative candidate/evidence set; Engineer is explicitly approved as inapplicable. Any FAIL, missing reviewer, changed state or candidate ambiguity blocks acceptance.
-7. Restricted before/after evidence supports every claim; public status claims no more than the evidence proves. The exact approved Work Order version and final outcome are recorded on its dedicated Issue.
+7. Restricted before/after evidence supports every claim; public status claims no more than the evidence proves. The exact approved Work Order version and final outcome are recorded on [Issue #3](https://github.com/maff0000/forgev2/issues/3).
 8. Rollback is either not needed or completed and independently verified. This acceptance does not authorize engineering dispatch, Claude execution, GitHub credential use, or changes excluded by §3.
 
 ## 10. Stop conditions and rollback
@@ -212,6 +212,6 @@ Rollback does not touch `/srv/forgev2/`, `/srv/pacman/`, SSH configuration, cred
 
 ## 11. Approval and completion boundary
 
-This candidate must first receive explicit CGPT exact-version approval, with artifact SHA and decision recorded on a dedicated Issue. Matt's administrator assignment, independent reviewer names, current target verification and execution-record ownership must also be present before execution. Once approved, the sole authorized operator is Matt within the bounded scope above. Any material deviation requires a new review.
+This candidate must first receive explicit CGPT exact-version approval, with artifact SHA and decision recorded on [Issue #3](https://github.com/maff0000/forgev2/issues/3). Matt's administrator assignment, independent reviewer names, current target verification and execution-record ownership must also be present before execution. Once approved, the sole authorized operator is Matt within the bounded scope above. Any material deviation requires a new review.
 
 After the change and independent evidence review, stop and return the completion report to CGPT and Matt. **This Work Order does not authorize ForgeV2 engineering implementation, specialist dispatch, installation, deployment, or merge.**
