@@ -1,6 +1,6 @@
 # FORGEV2-ACCESS-BOOTSTRAP-001 — Administrative Identity and Filesystem Boundary
 
-**State:** Draft Work Order — no host change or engineering dispatch is authorized by this draft
+**State:** Supervised-execution amendment review candidate — no host change or engineering dispatch is authorized by this candidate
 **Parent PBI:** `FV2-001` — prerequisite work only; this does not implement the product capability
 **Repository:** `maff0000/forgev2`
 **Work Order artifact:** `work-orders/FORGEV2-ACCESS-BOOTSTRAP-001.md`
@@ -8,13 +8,13 @@
 **Documentation baseline:** `519b2f7559650614d25b5f16cdefdcbeea6bbc09`
 **Governing FOUNDRY:** `aee86185aac6aa0d2ab7a243138c423292af191a`
 **Applicable FOUNDRY sources:** [Work Order contract](https://github.com/maff0000/foundry/blob/aee86185aac6aa0d2ab7a243138c423292af191a/standards/work-order-contract.md), [secure engineering standard](https://github.com/maff0000/foundry/blob/aee86185aac6aa0d2ab7a243138c423292af191a/standards/secure-engineering.md), and [Security by Design skill reference](https://github.com/maff0000/foundry/blob/aee86185aac6aa0d2ab7a243138c423292af191a/skills/security-by-design.md)
-**Related decisions:** `FV2-D017` through `FV2-D021` in [DECISIONS.md](../DECISIONS.md)
+**Related decisions:** `FV2-D017` through `FV2-D022` in [DECISIONS.md](../DECISIONS.md)
 **Authoritative access design:** [security/ACCESS_CONTROL.md](../security/ACCESS_CONTROL.md)
-**Exact-version approval:** Pending; record the approved artifact SHA on [Issue #3](https://github.com/maff0000/forgev2/issues/3) after this artifact commit exists.
+**Previous exact-version approval:** The prior Work Order version was accepted at `b3b7f3e91232b1ab1498f3285f687bb0334d4ee0` on [Issue #3](https://github.com/maff0000/forgev2/issues/3). This execution-arrangement amendment requires fresh exact-version review; record its approved artifact SHA and decision on Issue #3 after the candidate commit exists.
 
 ## 1. Purpose and authority
 
-Establish only the initial non-root ForgeV2 service identities and the approved filesystem access boundary needed for later, separately authorized delivery. This is one controlled administrative change on the previously approved ForgeV2 development environment. It does not start ForgeV2, Claude Code, a plugin, an application, or an engineering Work Order.
+Establish only the initial non-root ForgeV2 service identities and the approved filesystem access boundary needed for later, separately authorized delivery. This is one controlled administrative change on the previously approved ForgeV2 development environment. Under `FV2-D022`, Matt may use the existing root-local Claude Code installation as a directly supervised command executor for this Work Order only, after all applicable gates pass. It does not start ForgeV2, a ForgeV2 plugin or agent, an application, or an engineering Work Order.
 
 Matt Scott is the designated administrator and sole privileged operator for this Work Order. CGPT Project Architect is the independent verifier of the recorded evidence and retains architectural acceptance. Matt retains product and operational-risk authority. Any exact-version approval must be explicit and recorded on this Work Order's GitHub Issue at [Issue #3](https://github.com/maff0000/forgev2/issues/3); this document's presence or branch does not authorize execution.
 
@@ -63,19 +63,31 @@ If `/var/lib/forgev2` already exists as the expected empty root-owned parent, le
 
 ### Explicit exclusions
 
-No external human accounts; no SSH, firewall, credential, GitHub security, package, service, Claude Code, engine-installation or application changes; no Orchestrator automation; no specialist dispatch; no ForgeV1 changes; no changes under `/srv/forgev2/` or `/srv/pacman/`; no production worktree creation; no recursive ownership change over `/srv/src/forgev2/` or any tracked source; no Git fetch, pull, branch, commit or push against the live ForgeV2 repository or any GitHub remote. Git operations are permitted only in the disposable local fixture described in §6.
+No external human accounts; no SSH, firewall, credential, GitHub security, package, service, Claude Code installation or configuration changes; no Claude Code use except as the directly supervised command executor permitted by `FV2-D022`; no ForgeV2 plugin, engine agent, ForgeV1, or application execution; no Orchestrator automation; no specialist dispatch; no engine-installation or application changes; no changes under `/srv/forgev2/` or `/srv/pacman/`; no production worktree creation; no recursive ownership change over `/srv/src/forgev2/` or any tracked source; no Git fetch, pull, branch, commit or push against the live ForgeV2 repository or any GitHub remote. Git operations are permitted only in the disposable local fixture described in §6.
 
 ## 4. Roles, process boundary and execution limits
 
 - **Administrator/operator:** Matt Scott. Performs the small, explicitly authorized root operations and records each command and result in the restricted administrator evidence.
+- **Supervised command executor:** The existing root-local Claude Code installation may be proposed to issue commands for this administrative Work Order only. Matt remains the accountable administrator and must explicitly approve each privileged command or tightly bounded stage before execution; stage approval identifies the exact commands, targets, and stop conditions it covers. Claude has no authority to select, expand, substitute, retry, or approve privileged changes. There is no unattended execution, permission bypass, persistent blanket command approval, or alternative execution route. Before any use, verify and record in restricted evidence the exact executable, version, ownership, configuration, and relevant session-state side effects. Existing Claude provenance and security uncertainty remains a gate; this decision is not runtime or supply-chain approval. Unexpected session-state writes or effects outside the approved scope are a stop condition. Do not run a ForgeV2 plugin, engine agent, or application.
 - **Independent verifier:** CGPT Project Architect. Does not run the root commands; independently reviews sanitized before/after evidence and the positive/negative test results before acceptance.
 - **Independent assurance:** CGPT must name the Auditor, Tester and DevSecOps assessors, with their identities and read/write boundaries, on [Issue #3](https://github.com/maff0000/forgev2/issues/3) before execution. Auditor independently reviews state and change evidence; Tester independently repeats the fixture and access tests; DevSecOps assesses the account, filesystem and credential boundaries. No reviewer may be silently omitted.
 - **Engineer:** Not applicable to the authorized work because it changes only OS identities/permissions and contains no product or engine source implementation. CGPT must explicitly approve this role's inapplicability when approving the exact WO version.
 - **PL:** The new `forgev2-pl` identity is a target of this bootstrap, not an assumed installed ForgeV2 PL runtime. Matt coordinates this one manual administrative change; this does not create autonomous PL-to-agent dispatch. PL-only Git authority is proved against a local fixture, not exercised against GitHub.
-- **Specialist execution limits:** No ForgeV2 specialist agent is dispatched by this WO. Any independent review performed by an AI specialist remains subject to FOUNDRY's independent limit of four executions per specialist for this WO, including the first; fifth is prohibited, counts persist across resets, and exhaustion is FAIL with reason/evidence. The PL normally owns persisted specialist counters. As no operational PL exists yet, CGPT must resolve who holds that record before any AI reviewer is invoked; do not silently transfer that authority to the administrator.
+- **Specialist execution limits:** No ForgeV2 specialist agent is dispatched by this WO. Any independent review performed by an AI specialist remains subject to FOUNDRY's independent limit of four executions per specialist for this WO, including the first; fifth is prohibited, counts persist across resets, and exhaustion is FAIL with reason/evidence. The PL normally owns persisted specialist counters. As no operational PL exists yet, CGPT must assign the counter owner before any AI reviewer is invoked; do not silently transfer that authority to the administrator. Auditor, Tester, and DevSecOps must be appointed and remain independent of the executing Claude session. Reviewer identities, counter ownership, and restricted evidence handling must be recorded before any mutation.
 - **Administrative attempt bound:** One controlled change window. Each planned mutation is attempted once. Any failed command, unexpected output or changed precondition is BLOCKED; no retry, alternate command, or additional mutation without a newly reviewed WO version.
 
-Run independent identities only as distinct processes started by Matt's root-controlled administrative session. For example, after account creation:
+### Mandatory supervised checkpoints
+
+1. **Pre-execution:** Reverify authority, exact approved Work Order, host/repository state, all entry gates, reviewer appointments, execution-counter ownership, restricted evidence handling, and the approved Claude executable/version/configuration/session-state evidence. Matt explicitly approves starting the bounded stage.
+2. **Accounts:** Matt explicitly approves the account-creation command or tightly bounded account-creation stage; verify both service identities and homes before continuing.
+3. **Fixture:** Matt explicitly approves fixture setup and each planned fixture command or bounded test stage. Run the positive and negative tests exactly within §6; freeze the results.
+4. **Fixture acceptance:** Stop until CGPT records acceptance of the frozen fixture evidence. No live Git ownership or worktree-parent change may precede that acceptance.
+5. **Live permissions:** Matt explicitly approves each live permission command or tightly bounded permission-change stage. Recheck the captured baseline first; stop on any difference.
+6. **Evidence and assurance:** Freeze the final evidence candidate and obtain independent Auditor, Tester, and DevSecOps assessments against it. Reviewer work remains outside the executing Claude session.
+
+At every checkpoint, a failed command/test, changed environment, unexpected path, missing approval, or failed prerequisite means stop and report **BLOCKED + reason + evidence**. No retry or alternate execution route is permitted. Rollback uses only the exact targets and captured baseline in §10, under Matt's explicit authorization and the same supervised execution boundary. If that execution route is unavailable, stop and obtain CGPT/Matt direction; do not substitute another route.
+
+Run independent identities only as distinct processes started by Matt's root-controlled administrative session, including through the supervised executor only after Matt approves the exact command or bounded stage. For example, after account creation:
 
 ```sh
 runuser -u forgev2-pl -- /usr/bin/env -i \
@@ -98,7 +110,7 @@ Before any change, Matt records evidence that all gates pass:
 4. Current account/group state confirms both service account names and homes are unused, no conflicting UID/GID or group membership exists, and no unapproved sudo policy grants either identity privilege.
 5. Exact ownership/mode manifests and Git state have been captured for the allowed targets and relevant parent paths. Root's current SSH access has been tested from an independent session.
 6. The disposable fixture is in a newly allocated, empty temporary path. No live repo, hooks, inherited script, external code, network remote or real credential is used in the fixture.
-7. CGPT has recorded exact-version approval, the Engineer-inapplicability rationale, independent reviewer appointments, and the person responsible for the required persisted execution records. No unresolved security or architectural blocker remains.
+7. CGPT has recorded exact-version approval, the Engineer-inapplicability rationale, independent reviewer appointments and separation from the executing Claude session, the persisted execution-counter owner, and the restricted evidence handler. The exact Claude executable, version, ownership, configuration, and relevant session-state side effects have been verified and recorded; its provenance/security gate is resolved for this bounded use. Matt has explicitly approved the supervised execution arrangement and no unresolved security or architectural blocker remains.
 8. Restricted evidence storage is available. Public logs contain only sanitized outcomes and references, never host access details, credentials, fingerprints, secret contents or sensitive permission findings.
 
 Any failed or unknown gate is **BLOCKED + reason + evidence**. Stop before mutation. The old root-owned checkout, historical host report, empty worktree report or a passing fixture does not substitute for current verification.
@@ -164,11 +176,11 @@ Only after the fixture snapshot receives CGPT review and PASS, re-capture and co
 
    The recursive `chown` is strictly confined to the Git administrative directory; it must not follow or include tracked source, linked worktrees outside `.git`, submodule contents or any other path. If inspection finds an unexpected symlink, gitdir indirection, mount, submodule complication, permission requirement, or target state, stop before `chown` and return to CGPT. Preserve existing `.git` mode bits; no other mode changes are authorized by this WO.
 3. Recheck main's tracked tree/content, branch, HEAD, origin, clean state and registered worktrees. Confirm the only production ownership/mode differences are within `.git` and the stated worktree parent; no production worktree was created.
-4. Repeat the two separate `runuser` identity/environment checks and independent positive/negative filesystem tests against actual allowed paths. Do not execute GitHub operations, Claude Code, ForgeV2, ForgeV1, or any application code.
+4. Repeat the two separate `runuser` identity/environment checks and independent positive/negative filesystem tests against actual allowed paths. Claude Code may act only as the supervised command executor under `FV2-D022`; do not execute GitHub operations, a ForgeV2 plugin or agent, ForgeV1, or any application code.
 5. Verify Matt's root SSH access still works from a second independent session. SSH configuration and firewall state must be unchanged.
-6. Freeze a read-only administrative evidence manifest at `/var/log/forgev2-access-bootstrap-001/evidence/ADMIN-CANDIDATE-MANIFEST.txt`. It lists the exact final account/group state, allowed ownership/mode changes, repository identity/HEAD/tracked-tree digest, fixture snapshot digest, production checks, and SHA-256 digests of the underlying restricted evidence files. Compute `sha256sum /var/log/forgev2-access-bootstrap-001/evidence/ADMIN-CANDIDATE-MANIFEST.txt`; that digest is the single **Administrative Candidate ID**. Make the manifest and referenced evidence read-only before review. All three independent reviewers assess that same ID. Their role logs are separate from the frozen manifest. Any subsequent account or permission change requires a new manifest/Candidate ID and invalidates every prior reviewer PASS.
+6. Freeze a read-only administrative evidence manifest at `/var/log/forgev2-access-bootstrap-001/evidence/ADMIN-CANDIDATE-MANIFEST.txt`. It lists the exact final account/group state, allowed ownership/mode changes, repository identity/HEAD/tracked-tree digest, fixture snapshot digest, production checks, Matt's explicit command/stage approvals, the supervised executor identity and verified runtime details, and SHA-256 digests of the underlying restricted evidence files. Compute `sha256sum /var/log/forgev2-access-bootstrap-001/evidence/ADMIN-CANDIDATE-MANIFEST.txt`; that digest is the single **Administrative Candidate ID**. Make the manifest and referenced evidence read-only before review. All three independent reviewers, working separately from the executing Claude session, assess that same ID. Their role logs are separate from the frozen manifest. Any subsequent account or permission change requires a new manifest/Candidate ID and invalidates every prior reviewer PASS.
 
-The last operation does not install an engine, create a human account, authorize a GitHub credential, or open engineering dispatch. Actual credential provisioning, Claude runtime approval and a PL process launcher remain separate gates.
+The last operation does not install an engine, create a human account, authorize a GitHub credential, or open engineering dispatch. Claude runtime or supply-chain approval beyond the narrowly supervised command-executor use remains a separate gate, as does any PL process launcher.
 
 ## 8. Logs, evidence and communication
 
@@ -193,7 +205,7 @@ CGPT may accept completion only when all applicable items have independently ver
 5. PL and Engineer command processes ran as distinct UIDs with the declared clean environment; Engineer could not read the synthetic PL credential marker or reach PL credential files.
 6. CGPT-appointed Auditor, Tester and DevSecOps reviewers report PASS against the same unchanged administrative candidate/evidence set; Engineer is explicitly approved as inapplicable. Any FAIL, missing reviewer, changed state or candidate ambiguity blocks acceptance.
 7. Restricted before/after evidence supports every claim; public status claims no more than the evidence proves. The exact approved Work Order version and final outcome are recorded on [Issue #3](https://github.com/maff0000/forgev2/issues/3).
-8. Rollback is either not needed or completed and independently verified. This acceptance does not authorize engineering dispatch, Claude execution, GitHub credential use, or changes excluded by §3.
+8. Rollback is either not needed or completed and independently verified. This acceptance does not authorize engineering dispatch, ForgeV2 plugin or engine-agent execution, GitHub credential use, or changes excluded by §3.
 
 ## 10. Stop conditions and rollback
 
@@ -214,4 +226,4 @@ Rollback does not touch `/srv/forgev2/`, `/srv/pacman/`, SSH configuration, cred
 
 This candidate must first receive explicit CGPT exact-version approval, with artifact SHA and decision recorded on [Issue #3](https://github.com/maff0000/forgev2/issues/3). Matt's administrator assignment, independent reviewer names, current target verification and execution-record ownership must also be present before execution. Once approved, the sole authorized operator is Matt within the bounded scope above. Any material deviation requires a new review.
 
-After the change and independent evidence review, stop and return the completion report to CGPT and Matt. **This Work Order does not authorize ForgeV2 engineering implementation, specialist dispatch, installation, deployment, or merge.**
+After the change and independent evidence review, stop and return the completion report to CGPT and Matt. **This Work Order does not authorize ForgeV2 engineering implementation, specialist dispatch, plugin or engine-agent execution, installation, deployment, or merge.**
