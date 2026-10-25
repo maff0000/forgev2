@@ -13,11 +13,16 @@ Orchestrator has **not** been run yet.
 - The PL runs as an ordinary `claude` process using the Claude login that the
   account running it already has. ForgeV2 uses no API keys, extra subscriptions
   or separate Claude accounts. Specialists are subagents inside that PL process.
-- On execution hosts, start the PL as the non-root `forgev2-pl` account, which
-  holds the repository's Git push access. Do not start it as root, and do not
-  pass credentials in the Work Order, the prompt or the environment.
-- The guard hook is a policy layer inside that one process. It does not give
-  OS isolation between PL and Engineer. See "Security model" in `README.md`.
+- Start the PL as a non-root account (on execution hosts, `forgev2-pl`) that
+  holds Git push access for the target repository and nothing more. The PL tools
+  refuse to run as root unless `FORGE_ALLOW_ROOT=1`, which is for development
+  hosts only. Never pass credentials in the Work Order, the prompt or the environment.
+- That account needs: the plugin installed in its own user scope, an approved
+  gitleaks at `/usr/local/bin` or `/usr/bin` (see `INSTALL.md`), its own Claude
+  login, and write access to `$(dirname "$ROOT")/worktrees`, which you create
+  before the first run.
+- In this release specialists share the PL's process and account, so they are
+  **not** isolated from the PL's credentials. See "Security model" in `README.md`.
 
 ## 1. Pass a Work Order
 
@@ -50,10 +55,10 @@ Parse it and validate it before acting:
 2. `type == "result"`, `subtype == "success"` and `is_error == false`.
 3. The first line of the `result` string matches exactly
    `# <WO> - (DELIVERED|ESCALATED|BLOCKED)`, and `<WO>` is the Work Order you sent.
-4. If the WO reached the worktree stage,
-   `<worktrees>/<WO>/.forge/<WO>/ledger.json` has `"outcome"` equal to that
-   status. The ledger is authoritative. A `BLOCKED` result at the identity gate
-   or at intake has no ledger.
+4. If the WO reached the worktree stage, the ledger copy written at close,
+   `<worktrees>/<WO>/.forge/<WO>/ledger.json`, has `"outcome"` equal to that
+   status. (The authoritative ledger is in the PL account's private state
+   directory.) A `BLOCKED` result at the identity gate or at intake has no ledger.
 
 If any check fails, treat the run as **BLOCKED (malformed PL result)**. Keep
 stdout and stderr, and do not retry automatically. `session_id` and

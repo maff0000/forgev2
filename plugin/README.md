@@ -17,11 +17,11 @@ it dispatches four specialist subagents and owns all Git operations.
 
 ## Install
 
-```
-/plugin install forgev2 --marketplace maff0000/forgev2
+```sh
+claude plugin marketplace add maff0000/forgev2 && claude plugin install forgev2@forgev2
 ```
 
-or from a shell: `claude plugin marketplace add maff0000/forgev2 && claude plugin install forgev2@forgev2`.
+Install it in the account that runs the PL (plugins install per user).
 See the repository `INSTALL.md` for the full checklist.
 
 ## The loop
@@ -35,8 +35,11 @@ Engineer -> PL tests + forge-commit -> Auditor | Tester | DevSecOps (parallel, f
    any role at 4 executions ............. ESCALATE (5th dispatch is refused by the guard)
 ```
 
-Counts live in `<worktree>/.forge/<WO>/ledger.json` and are committed with the
-delivery record. They persist across restarts: re-running `forge-start` resumes.
+Counts and results live in a ledger in the PL's private state directory
+(`~/.local/state/forgev2`, mode 0700), never in the worktree. A copy is committed
+with the delivery record. Re-running `forge-start` resumes; counts never reset.
+Every result must match its own dispatch on the exact commit reviewed, and the
+ledger refuses any dispatch or commit the current decision does not allow.
 
 ## Work Order format
 
@@ -63,24 +66,48 @@ result and handles `DELIVERED` / `ESCALATED` / `BLOCKED` is described in
 
 ## Security model
 
-- **Identity gate:** exact `OWNER/NAME` match on both fetch and push URLs (only
-  canonical github.com forms), top-level checkout, optional known commit, and a
-  worktree-history check. Re-checked before every commit and push.
-- **Specialist restrictions (guard):** Git read-only; no `.git`/`.forge` access;
-  no credential paths or environment dumps; Engineer edits only inside its
-  worktree (symlinks resolved); reviewers write only to a scratch directory; no
-  PL tools; the guard fails closed.
-- **Secrets:** every PL commit is scanned by gitleaks; a finding blocks the commit.
-- **Limit of this layer:** subagents run in the PL's own process and Unix
-  account, so the guard is a policy layer. It does **not** provide
-  operating-system isolation between PL and Engineer, and a fault in the guard
-  or in Claude Code would not be contained by the OS.
+**Enforced by the PL tools** (`forge-*`, which run as the PL and keep their
+state outside the worktree):
+
+- **Identity gate:** exact `OWNER/NAME` on the single fetch URL and single push
+  URL of `origin` (canonical github.com forms only; no URL rewriting, no
+  credentials in URLs), top-level checkout, known commit and worktree history.
+  Re-checked before every commit and push. Pushes go to the verified URL.
+- **Ledger:** results bound to dispatches and candidates; the 4-execution limit
+  and escalations are binding; a closed Work Order cannot change.
+- **What gets pushed:** only `forge/<WO>`, never forced, and only the reviewed
+  candidate followed by delivery-record files. Commits made outside
+  `forge-commit` are refused.
+- **Secrets:** gitleaks (approved build, checked by path, owner and SHA-256)
+  scans each commit and the whole branch before push, using ForgeV2's own rules.
+  Repository allowlists, `.gitleaksignore` and `gitleaks:allow` are not honoured.
+- **Worktree contents are untrusted:** the PL never runs code or Git hooks from
+  the worktree, and never trusts the worktree's `.git` pointer.
+- **Not as root:** the tools refuse to run as root unless `FORGE_ALLOW_ROOT=1`
+  (development hosts only; recorded in the ledger).
+
+**Guard hook (policy, best-effort):** specialists may use only file tools and
+the shell; file tools are confined by an allow-list (reads: worktree, scratch,
+project checkout; Engineer writes: worktree minus `.git`/`.forge`; reviewer
+writes: scratch). Shell commands get pattern checks (Git writes, PL tools,
+credential paths, environment dumps) that a specialist trying to evade them
+**can** bypass, for example through an interpreter.
+
+**Not enforced in this release:** specialists run as subagents in the PL's own
+process and Unix account. A determined specialist can therefore read whatever
+the PL account can read (including any Git credential it holds), write anywhere
+that account can write, and edit the ledger through the shell. Requirements 1
+and 3 ("Engineer changes only authorised files", "PL credentials inaccessible to
+the Engineer") are **not met** until specialists run as `forgev2-agent` in
+separate processes. Until then: run the PL as a non-root account holding no
+credentials beyond the target repository, and do not give external engineers
+access.
 
 | Property | Status |
 | --- | --- |
-| Plugin behaviour (identity gate, loop limits, guard, commit/push gates) | Tested: unit tests and live runs |
-| Filesystem boundary between the `forgev2-pl` and `forgev2-agent` accounts | Tested separately: `tests/host/os-boundary.sh` |
-| Process isolation between PL and Engineer (Engineer under `forgev2-agent`) | **Not demonstrated.** The plugin does not do this yet |
+| PL-tool gates (identity, ledger, commit, push, secrets) | Tested: `tests/test_forgev2.py` |
+| Filesystem boundary between `forgev2-pl` and `forgev2-agent` | Tested separately: `tests/host/os-boundary.sh` |
+| Process isolation between PL and specialists | **Not implemented** (planned: separate processes as `forgev2-agent`) |
 | Access by external engineers | **Not ready** |
 
 ## Tests

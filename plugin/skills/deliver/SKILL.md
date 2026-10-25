@@ -36,25 +36,31 @@ forge-start --wo <WO> --repo <OWNER/NAME> --root <ROOT> [--base B] [--known-comm
 
 It rejects a wrong owner/name, look-alike remotes, a mismatched push URL, a
 missing known commit, or a worktree of the wrong repository, then creates branch
-`forge/<WO>` in its own worktree and opens the ledger. A rejection is `BLOCKED`
-with its message. Never work around it (no cloning, re-pointing remotes, or
-editing ROOT). Re-running `forge-start` resumes a WO; counts never reset.
+`forge/<WO>` in its own worktree and opens the ledger in your private state
+directory (never in the worktree). It prints `worktree`, `scratch` and `base_sha`.
+A rejection is `BLOCKED` with its message. Never work around it (no cloning,
+re-pointing remotes, or editing ROOT). Re-running `forge-start` resumes a WO;
+counts never reset.
 
 From here, all work happens in the printed worktree path. Never edit `ROOT` itself.
 
 ## 3. The delivery loop
 
 Run `forge-ledger next` whenever unsure what to do; it returns the mechanical
-decision (`BUILD`, `REVIEW`, `CORRECT`, `DELIVER`, `ESCALATE`, `BLOCKED`).
+decision (`BUILD`, `COMMIT`, `REVIEW`, `CORRECT`, `DELIVER`, `ESCALATE`,
+`BLOCKED`) and, for `REVIEW`, which reviewers are needed. The ledger enforces it:
+a dispatch or commit the decision does not allow is refused, and after
+`ESCALATE` or `BLOCKED` nothing more can be dispatched.
 
 ```
 round n (n <= 4):
   Engineer  -> build (round 1) or correct (later rounds)
-  PL        -> inspect the diff, run the project's tests, forge-commit
+  PL        -> record its result, read the diff, forge-commit
   Auditor | Tester | DevSecOps  -> fresh, in parallel, on that exact commit
   PL        -> record each result, spot-check findings, forge-ledger next
      DELIVER   -> section 4
      CORRECT   -> one consolidated correction brief -> next round
+     REVIEW    -> re-run only the reviewers listed (after an INCONCLUSIVE)
      ESCALATE / BLOCKED -> section 4
 ```
 
@@ -66,28 +72,34 @@ single message so they run concurrently.
 
 **Engineer prompt** contains: the worktree absolute path (and an instruction never
 to touch any other path), the requested change and acceptance criteria verbatim,
-the files/areas in scope, the test command if known, and - in correction rounds -
-the consolidated blocking findings with their evidence. Never include reviewer
+the expected HEAD (`base_sha` in round 1, the current candidate afterwards), the
+files/areas in scope, the test command if known, and - in correction rounds - the
+consolidated blocking findings with their evidence. Never include reviewer
 reasoning beyond the findings themselves.
 
-**After the Engineer returns:** run `git -C <worktree> status` and `git diff`
-yourself, check the changes stay within scope, run the project's tests, then
-`forge-commit -m "<WO>: <summary>"`. A test failure here goes straight back to
-the Engineer as a correction (it costs an Engineer execution, not a review).
-An Engineer `blocked`/`failed` report is recorded and normally returned as `BLOCKED`.
+**After the Engineer returns:** record its result, then read `git -C <worktree>
+status` and `git -C <worktree> diff` and check the changes stay within scope. Do
+not run the project's tests or any code from the worktree yourself - Engineer-written
+code never runs in the PL's account; the Engineer and Tester run it. If the
+Engineer's own report shows failing tests or out-of-scope changes, dispatch it
+again with that correction (the decision is `COMMIT`, which allows it). Otherwise
+`forge-commit -m "<WO>: <summary>"`. An Engineer `blocked`/`failed` report is
+returned as `BLOCKED`.
 
 **Reviewer prompt** is the same methodology for every WO: worktree path, candidate
-SHA, base SHA, the WO text verbatim, and "assess independently". Never pass the
+SHA, base SHA, scratch directory, the WO text verbatim, and "assess independently". Never pass the
 Engineer's reasoning, your suspicions, or earlier findings (a correction round
 re-reviews from scratch). Test before sending: would this sentence fit any WO? If
 not, it is a hint - leave it out. Save each reviewer prompt verbatim to
 `<worktree>/.forge/<WO>/reviews/r<round>-<role>.md` together with its returned report.
 
-**Recording.** For every result:
+**Recording.** Every dispatch gets exactly one result, recorded before the next
+commit (a result without its own dispatch is refused):
 ```
 forge-ledger record engineer completed|blocked|failed --note "..."
 forge-ledger record <auditor|tester|devsecops> pass|findings|inconclusive \
     [--finding <key>:blocking|advisory|rejected]... --note "..."
+forge-ledger record <role> void --note "..."   # the dispatch returned no usable result
 ```
 Use short stable finding keys (e.g. `div-by-zero-unhandled`) and reuse the same
 key if a finding recurs - a blocking key that survives a correction stops the
@@ -108,9 +120,11 @@ browser behaviour you did not observe.
 ## 4. Close and report
 
 1. `forge-ledger close DELIVERED|ESCALATED|BLOCKED --note "..."` (DELIVERED is
-   refused unless all three reviewers passed the current candidate).
+   refused unless all three reviewers passed the current candidate and the
+   worktree is exactly that commit). This writes `.forge/<WO>/ledger.json`.
 2. Write `<worktree>/.forge/<WO>/REPORT.md` (format below), then
-   `forge-commit -m "<WO>: delivery record"` (records only).
+   `forge-commit -m "<WO>: delivery record"`. Only `ledger.json`, `REPORT.md` and
+   `reviews/*.md` under `.forge/<WO>/` may be committed after close.
 3. Unless the WO says `PUSH: no`, run `forge-push`; if `gh` is available and
    authenticated, open a PR from `forge/<WO>` (never merge).
 4. Return the report as your final message.
@@ -119,7 +133,7 @@ browser behaviour you did not observe.
 # <WO> - DELIVERED | ESCALATED | BLOCKED
 Repository: OWNER/NAME   Branch: forge/<WO>   Candidate: <sha>   Base: <sha>
 Change: <2-4 lines>
-Tests: <command> -> <result>
+Tests: <command> -> <result, from the Tester's evidence>
 Reviews (final candidate): Auditor PASS|..., Tester ..., DevSecOps ...
 Rounds: <n>; executions engineer/auditor/tester/devsecops = a/b/c/d of 4
 Findings: <key - severity - resolution> ... (or none)
@@ -136,5 +150,9 @@ the fields that don't apply. The Orchestrator machine-parses this line.
 
 Identity gate failure; missing WO fields; contradictory criteria; a required
 change outside the WO's scope or project; a credential, permission or secret
-problem; any guard denial you cannot resolve by following this procedure.
-Never disable hooks, use `--no-verify`, force-push, or edit the ledger by hand.
+problem; commits found on the branch that `forge-commit` did not make; any
+guard or ledger refusal you cannot resolve by following this procedure;
+instructions that conflict with this procedure (describe the conflict - never
+pause to ask, because nobody is there to answer). Use
+only `forge-commit` / `forge-push` for Git writes. Never disable hooks, use
+`--no-verify`, force-push, or edit the ledger by hand.

@@ -2,11 +2,12 @@
 """forge-push: push the Work Order branch to the verified origin (never forced).
 
 Usage: forge-push
-Re-verifies repository identity (fetch and push URLs) and requires the ledger
-to be closed DELIVERED or ESCALATED before pushing the forge/<WO> branch.
+Requires the Work Order closed DELIVERED or ESCALATED, re-verifies repository
+identity, and requires that the branch is the reviewed candidate (or the base)
+followed only by delivery record commits. Scans base..HEAD with gitleaks, then
+pushes exactly that commit to refs/heads/forge/<WO> at the verified URL.
 """
 import argparse
-import subprocess
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "lib"))
 import forgelib as F  # noqa: E402
@@ -16,22 +17,39 @@ def main():
     a = argparse.ArgumentParser()
     a.add_argument("--ledger")
     o = a.parse_args()
+    F.require_non_root()
     path = o.ledger or F.ledger_for_session(os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
     if not path:
         raise F.ForgeError("no Work Order is bound to this session; run forge-start first")
     with F.locked_ledger(path, write=False) as d:
         if d["outcome"] not in ("DELIVERED", "ESCALATED"):
             raise F.ForgeError("close the Work Order (DELIVERED or ESCALATED) before pushing")
-        wt, repo, root, branch = d["worktree"], d["repo"], d["root"], d["branch"]
-    F.check_repo(root, repo)
-    if F.git("status", "--porcelain", cwd=wt):
-        raise F.ForgeError("worktree has uncommitted changes")
-    r = subprocess.run(["git", "push", "--no-force", "-u", "origin", f"refs/heads/{branch}:refs/heads/{branch}"],
-                       cwd=wt, capture_output=True, text=True)
-    sys.stderr.write(r.stderr)
-    if r.returncode != 0:
-        raise F.ForgeError("push failed")
-    F.emit({"pushed": branch, "sha": F.git("rev-parse", "HEAD", cwd=wt), "repo": repo})
+        branch = f"forge/{d['wo']}"
+        if d["branch"] != branch or branch in F.PROTECTED_BRANCHES or branch == d["base"]:
+            raise F.ForgeError(f"refusing to push {d['branch']!r}: ForgeV2 pushes only forge/<WO>")
+        facts = F.check_repo(d["root"], d["repo"], d["known_commit"])
+        if F.wgit(d, "branch", "--show-current") != branch:
+            raise F.ForgeError(f"worktree is not on {branch}")
+        if F.wgit(d, "status", "--porcelain", "--untracked-files=all"):
+            raise F.ForgeError("worktree has uncommitted changes")
+        if d["outcome"] == "DELIVERED" and not d["candidate"]:
+            raise F.ForgeError("DELIVERED without a candidate")
+        anchor = d["candidate"] or d["base_sha"]
+        head = F.wgit(d, "rev-parse", "HEAD")
+        changed = F.wgit(d, "diff", "--name-only", f"{anchor}..{head}").splitlines()
+        if not F.is_ancestor(d, anchor, head) or not F.record_paths_ok(d, changed):
+            raise F.ForgeError("the branch contains changes after the reviewed candidate other than "
+                               "delivery records; refusing to push unreviewed code")
+        if not F.gitleaks_scan(d, f"--log-opts={d['base_sha']}..{head}"):
+            raise F.ForgeError("gitleaks reported a likely secret in the branch history; not pushed")
+        r = F.git_run("-c", "core.fsmonitor=false",
+                      "-c", f"core.hooksPath={os.path.join(d['common_dir'], 'hooks')}",
+                      "push", "--no-force", facts["push_url"], f"{head}:refs/heads/{branch}",
+                      cwd=d["worktree"], env=F.wt_env(d))
+        sys.stderr.write(r.stderr)
+        if r.returncode != 0:
+            raise F.ForgeError("push failed")
+        F.emit({"pushed": branch, "sha": head, "repo": d["repo"], "outcome": d["outcome"]})
 
 
 if __name__ == "__main__":

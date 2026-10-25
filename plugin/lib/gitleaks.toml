@@ -1,0 +1,6 @@
+title = "ForgeV2 secret scan"
+
+# Default gitleaks rules, with no repository allowlists. Repository
+# .gitleaks.toml / .gitleaksignore files are deliberately not used.
+[extend]
+useDefault = true

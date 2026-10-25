@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """forge-ledger: Work Order execution record (PL only).
 
-  forge-ledger status
+  forge-ledger status | next
   forge-ledger record ROLE OUTCOME [--finding KEY[:blocking|advisory|rejected]]... [--note TEXT]
-  forge-ledger next
   forge-ledger close DELIVERED|ESCALATED|BLOCKED [--note TEXT]
 
-Specialist executions are counted automatically when the PL dispatches them;
-the 5th dispatch of any role is refused. Use --ledger PATH outside a bound session.
+Each dispatch is counted when the PL makes it, and each result must match exactly
+one dispatch (OUTCOME 'void' when a dispatch produced no result). The 5th dispatch
+of any role is refused. A closed Work Order cannot be changed. Closing writes a
+copy of the ledger to <worktree>/.forge/<WO>/ledger.json for the records commit.
 """
 import argparse
 import os, sys
@@ -37,14 +38,25 @@ def main():
         if o.cmd == "record":
             F.record(d, o.role, o.outcome.lower(), o.finding, o.note)
         if o.cmd == "close":
+            if d["outcome"]:
+                raise F.ForgeError(f"Work Order is already closed ({d['outcome']})")
             decision, reason = F.decide(d)
-            if o.outcome == "DELIVERED" and decision != "DELIVER":
-                raise F.ForgeError(f"cannot close DELIVERED: {decision} - {reason}")
+            if o.outcome == "DELIVERED":
+                if decision != "DELIVER":
+                    raise F.ForgeError(f"cannot close DELIVERED: {decision} - {reason}")
+                if not F.worktree_matches_candidate(d):
+                    raise F.ForgeError("cannot close DELIVERED: the worktree is not exactly the reviewed candidate")
             d["outcome"] = o.outcome
             d["events"].append({"t": F.now(), "type": "close", "outcome": o.outcome, "note": o.note})
+            rec = F.records_dir(d)
+            os.makedirs(rec, exist_ok=True)
+            with open(os.path.join(rec, "ledger.json"), "w") as f:
+                f.write(F._dump(d))
         decision, reason = F.decide(d)
         F.emit({"wo": d["wo"], "round": d["round"], "candidate": d["candidate"],
-                "counts": d["counts"], "remaining": {k: d["limit"] - v for k, v in d["counts"].items()},
+                "counts": d["counts"], "remaining": {k: F.LIMIT - v for k, v in d["counts"].items()},
+                "pending": [e["role"] for e in F.pending(d)],
+                "needs_review": F.needs_review(d) if decision == "REVIEW" else [],
                 "decision": decision, "reason": reason, "outcome": d["outcome"]})
 
 

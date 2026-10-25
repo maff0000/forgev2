@@ -15,7 +15,7 @@ python3 -m unittest discover -s <checkout>/tests    # plugin self-tests
 sudo <checkout>/tests/host/os-boundary.sh <checkout>/plugin   # execution host only
 ```
 
-Prerequisites on the execution host: Claude Code with Matt's existing login for the account that runs the PL, `git`, `python3`, `gitleaks` on `PATH`, and push access for that account to the target repository.
+Prerequisites on the execution host: Claude Code with Matt's existing login for the account that runs the PL, `git`, `python3`, gitleaks installed root-owned at `/usr/local/bin/gitleaks` from the official release after checking the archive against the release-published SHA-256 (v8.30.1 linux x64: archive `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`, binary `88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509`; the plugin refuses any other build unless its SHA-256 is listed in `FORGE_GITLEAKS_SHA256`), a non-root PL account, and push access for that account to the target repository.
 
 ## Matt's one-line request
 

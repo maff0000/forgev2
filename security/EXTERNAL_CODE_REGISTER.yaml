@@ -32,14 +32,22 @@ external_runtime_or_development_tools_observed:
     approval: not_established_by_this_record
   - name: gitleaks
     version_reported: 8.30.1
-    role: secret scanning in the committed Git hook and in the ForgeV2 plugin's forge-commit
+    role: secret scanning in the committed Git hook and in the ForgeV2 plugin's forge-commit and forge-push
     repository_incorporation: false
     provenance: >-
       Official GitHub release v8.30.1 (gitleaks_8.30.1_linux_x64.tar.gz); archive
       SHA-256 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb matched
       the release-published digest; installed binary only to /usr/local/bin on the
       development host. Not packaged by Debian bookworm.
-    licence_and_supply_chain_assessment: pending
+    use_control: >-
+      The plugin accepts only a root-owned, non-writable binary at /usr/local/bin or
+      /usr/bin whose SHA-256 is pinned in plugin/lib/forgelib.py
+      (88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509) or listed by
+      the operator in FORGE_GITLEAKS_SHA256.
+    licence_and_supply_chain_assessment: >-
+      MIT licence (upstream LICENSE). Single static Go binary run as a subprocess; no
+      code incorporated. Integrity: release digest verified, binary hash pinned.
+      Assessed by Claude during FORGEV2-PLUGIN-BUILD-001; not independently reviewed.
     approval: not_established_by_this_record
 security_approvals_recorded: []
 approved_exceptions_recorded: []

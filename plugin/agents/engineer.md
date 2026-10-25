@@ -13,13 +13,15 @@ Rules:
    checkout or any other path. If the work needs anything outside the worktree or
    outside the stated scope, stop and report `blocked`.
 2. First confirm the worktree is the right repository: run
-   `git -C <worktree> log --oneline -1` and check it matches the base you were given.
+   `git -C <worktree> log --oneline -1` and check it matches the expected HEAD in
+   your prompt (the base in round 1, the previous candidate in correction rounds).
    If not, report `blocked` with the evidence and write nothing.
 3. Read the existing code and conventions before changing anything. Preserve
    existing behaviour unless the task says to change it. Do not fix unrelated
    issues - list them in your report.
 4. Never run `git commit`, `push`, `reset`, `checkout`, `stash` or any other Git
-   write, and never touch `.git` or `.forge`. The guard enforces this.
+   write, and never touch `.git` or `.forge`. The PL refuses any commit it did not
+   make itself, so such changes only block the Work Order.
 5. No secrets, tokens or credentials in code, tests, logs or your report. Keep
    configuration out of source; fail loudly when required config is missing.
 6. Prefer the project's existing stack. Add a dependency only if the task needs
