@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""forge-ledger: Work Order execution record (PL only).
+
+  forge-ledger status
+  forge-ledger record ROLE OUTCOME [--finding KEY[:blocking|advisory|rejected]]... [--note TEXT]
+  forge-ledger next
+  forge-ledger close DELIVERED|ESCALATED|BLOCKED [--note TEXT]
+
+Specialist executions are counted automatically when the PL dispatches them;
+the 5th dispatch of any role is refused. Use --ledger PATH outside a bound session.
+"""
+import argparse
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "lib"))
+import forgelib as F  # noqa: E402
+
+
+def main():
+    a = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    a.add_argument("--ledger")
+    sub = a.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("status")
+    sub.add_parser("next")
+    r = sub.add_parser("record")
+    r.add_argument("role", choices=F.ROLES)
+    r.add_argument("outcome")
+    r.add_argument("--finding", action="append", default=[])
+    r.add_argument("--note", default="")
+    c = sub.add_parser("close")
+    c.add_argument("outcome", choices=("DELIVERED", "ESCALATED", "BLOCKED"))
+    c.add_argument("--note", default="")
+    o = a.parse_args()
+    path = o.ledger or F.ledger_for_session(os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
+    if not path:
+        raise F.ForgeError("no Work Order is bound to this session; run forge-start first")
+    with F.locked_ledger(path, write=o.cmd in ("record", "close")) as d:
+        if o.cmd == "record":
+            F.record(d, o.role, o.outcome.lower(), o.finding, o.note)
+        if o.cmd == "close":
+            decision, reason = F.decide(d)
+            if o.outcome == "DELIVERED" and decision != "DELIVER":
+                raise F.ForgeError(f"cannot close DELIVERED: {decision} - {reason}")
+            d["outcome"] = o.outcome
+            d["events"].append({"t": F.now(), "type": "close", "outcome": o.outcome, "note": o.note})
+        decision, reason = F.decide(d)
+        F.emit({"wo": d["wo"], "round": d["round"], "candidate": d["candidate"],
+                "counts": d["counts"], "remaining": {k: d["limit"] - v for k, v in d["counts"].items()},
+                "decision": decision, "reason": reason, "outcome": d["outcome"]})
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except F.ForgeError as e:
+        print(f"forge-ledger: {e}", file=sys.stderr)
+        sys.exit(1)

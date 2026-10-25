@@ -2,7 +2,20 @@
 
 ForgeV2 is **AI-first**. This is a task list for Claude, **not** a self-installer or a new governance workflow. Matt supplies the target and authorises material changes; Claude carries out routine installation, fixes ordinary problems, tests, and reports the outcome.
 
-**Release status:** The portable ForgeV2 plugin is not yet implemented in this repository. Until `plugin/.claude-plugin/plugin.json` and its declared role/skill resources exist, report **NOT YET INSTALLABLE**. Do not pass off inherited ForgeV1 files or a draft Work Order as an installed product.
+**Release status:** The ForgeV2 plugin is in `plugin/` (manifest `plugin/.claude-plugin/plugin.json`, version in that file). It is pending independent review; install it from the reviewed commit only. Usage, Work Order format and the Orchestrator command are in [plugin/README.md](plugin/README.md).
+
+## Commands Claude uses
+
+```sh
+claude plugin validate <checkout>/plugin            # must pass
+claude plugin marketplace add <checkout>            # or: maff0000/forgev2 (GitHub)
+claude plugin install forgev2@forgev2               # or load per run with --plugin-dir <checkout>/plugin
+claude plugin details forgev2                       # expect skill deliver; agents engineer, auditor, tester, devsecops
+python3 -m unittest discover -s <checkout>/tests    # plugin self-tests
+sudo <checkout>/tests/host/os-boundary.sh <checkout>/plugin   # execution host only
+```
+
+Prerequisites on the execution host: Claude Code with Matt's existing login for the account that runs the PL, `git`, `python3`, `gitleaks` on `PATH`, and push access for that account to the target repository.
 
 ## Matt's one-line request
 

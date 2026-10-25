@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""forge-push: push the Work Order branch to the verified origin (never forced).
+
+Usage: forge-push
+Re-verifies repository identity (fetch and push URLs) and requires the ledger
+to be closed DELIVERED or ESCALATED before pushing the forge/<WO> branch.
+"""
+import argparse
+import subprocess
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "lib"))
+import forgelib as F  # noqa: E402
+
+
+def main():
+    a = argparse.ArgumentParser()
+    a.add_argument("--ledger")
+    o = a.parse_args()
+    path = o.ledger or F.ledger_for_session(os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
+    if not path:
+        raise F.ForgeError("no Work Order is bound to this session; run forge-start first")
+    with F.locked_ledger(path, write=False) as d:
+        if d["outcome"] not in ("DELIVERED", "ESCALATED"):
+            raise F.ForgeError("close the Work Order (DELIVERED or ESCALATED) before pushing")
+        wt, repo, root, branch = d["worktree"], d["repo"], d["root"], d["branch"]
+    F.check_repo(root, repo)
+    if F.git("status", "--porcelain", cwd=wt):
+        raise F.ForgeError("worktree has uncommitted changes")
+    r = subprocess.run(["git", "push", "--no-force", "-u", "origin", f"refs/heads/{branch}:refs/heads/{branch}"],
+                       cwd=wt, capture_output=True, text=True)
+    sys.stderr.write(r.stderr)
+    if r.returncode != 0:
+        raise F.ForgeError("push failed")
+    F.emit({"pushed": branch, "sha": F.git("rev-parse", "HEAD", cwd=wt), "repo": repo})
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except F.ForgeError as e:
+        print(f"forge-push: {e}", file=sys.stderr)
+        sys.exit(1)
