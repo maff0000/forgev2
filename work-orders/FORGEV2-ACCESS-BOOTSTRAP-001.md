@@ -36,14 +36,14 @@ The exact GitHub tracking Issue and current VPS identity are unresolved at draft
 
 ### Authorized changes after all entry gates pass
 
-1. Create only `forgev2-pl` and `forgev2-agent` as Debian system identities, each with its own private primary group, dynamically allocated UID/GID, `/usr/sbin/nologin`, no password, no sudo and a private home:
+1. After all entry gates and the pre-change capture pass, create only `forgev2-pl` and `forgev2-agent` as Debian system identities, each with its own private primary group, dynamically allocated UID/GID, `/usr/sbin/nologin`, no password, no sudo and a private home:
    - `/var/lib/forgev2/pl`, owned by `forgev2-pl:forgev2-pl`, mode `0700`.
    - `/var/lib/forgev2/agent`, owned by `forgev2-agent:forgev2-agent`, mode `0700`.
-2. Create `/var/lib/forgev2` as an empty `root:root` parent, mode `0755`, only if absent. If it already exists with unexpected contents or ownership, stop; do not adopt or overwrite it.
-3. After the disposable fixture passes, transfer ownership of only `/srv/src/forgev2/main/.git` and its contained Git administrative metadata to `forgev2-pl:forgev2-pl`. Preserve its existing permission bits unless a tested, explicitly listed metadata permission correction is necessary and approved. Do not recurse across the repository or change tracked source ownership/content.
-4. Transfer only `/srv/src/forgev2/worktrees/` to `forgev2-pl:forgev2-pl` and set its mode to `0711`: PL can create/manage children; other identities can traverse a known child path but cannot list the directory. Each future WO worktree must use a separately authorized WO-specific group and child permissions; this WO does not create a production worktree or grant persistent agent membership in a general worktree group.
-5. Use a disposable local Git fixture to prove the planned WO-specific group and worktree permissions, then remove that fixture and temporary fixture group/memberships.
-6. Verify separate, root-controlled command invocations for both service UIDs with an explicitly constructed environment. These are shell/identity checks only; do not invoke Claude Code or ForgeV2.
+2. Create the restricted log root under `/var/log/forgev2-access-bootstrap-001/logs/` after baseline capture; this evidence path is outside the source checkout and engine installation.
+3. Use a production-equivalent disposable Git fixture with those identities and temporary WO-specific group membership. Freeze and review the fixture results before touching live Git metadata or worktree-parent permissions.
+4. Only after fixture PASS and CGPT's recorded fixture review, transfer ownership of only `/srv/src/forgev2/main/.git` and its contained Git administrative metadata to `forgev2-pl:forgev2-pl`. Preserve its existing permission bits. Do not recurse across the repository or change tracked source ownership/content.
+5. Transfer only `/srv/src/forgev2/worktrees/` to `forgev2-pl:forgev2-pl` and set its mode to `0711`: PL can create/manage children; other identities can traverse a known child path but cannot list the directory. Each future WO worktree must use a separately authorized WO-specific group and child permissions; this WO does not create a production worktree or grant persistent agent membership in a general worktree group.
+6. Verify production boundaries and Matt's administrative access, then freeze a single administrative candidate identity for independent review. Never write logs or test artifacts under `/srv/src/forgev2/main/` or `/srv/forgev2/`.
 
 ### Exact proposed account commands
 
@@ -63,7 +63,7 @@ If `/var/lib/forgev2` already exists as the expected empty root-owned parent, le
 
 ### Explicit exclusions
 
-No external human accounts; no SSH, firewall, credential, GitHub security, package, service, Claude Code, engine-installation, application, or repository-content changes; no Orchestrator automation; no specialist dispatch; no ForgeV1 changes; no changes under `/srv/forgev2/` or `/srv/pacman/`; no production worktree creation; no recursive ownership change over `/srv/src/forgev2/` or any tracked source; no Git fetch, pull, branch, commit or push on the VPS.
+No external human accounts; no SSH, firewall, credential, GitHub security, package, service, Claude Code, engine-installation or application changes; no Orchestrator automation; no specialist dispatch; no ForgeV1 changes; no changes under `/srv/forgev2/` or `/srv/pacman/`; no production worktree creation; no recursive ownership change over `/srv/src/forgev2/` or any tracked source; no Git fetch, pull, branch, commit or push against the live ForgeV2 repository or any GitHub remote. Git operations are permitted only in the disposable local fixture described in §6.
 
 ## 4. Roles, process boundary and execution limits
 
@@ -105,7 +105,13 @@ Any failed or unknown gate is **BLOCKED + reason + evidence**. Stop before mutat
 
 ## 6. Disposable fixture and verification plan
 
-Use a fresh local bare remote and working repository created with Git commands only at `/tmp/forgev2-access-bootstrap-001-fixture`; fail without touching it if that path already exists. Mark all remotes synthetic, make no network requests, run no hooks or inherited scripts. Use a temporary group named `forgev2-wo-access-bootstrap-001` containing only the two service identities:
+The two service accounts and homes are created after §5 entry-gate verification and pre-change capture, before fixture work. Then create the WO log root outside both the source checkout and engine installation, with owner `root:root` and mode `0700`; fail if it already exists. The initial pre-change capture is made by Matt before either mutation and retained in the restricted operator evidence store. Create the log root with:
+
+```sh
+install -d -o root -g root -m 0700 /var/log/forgev2-access-bootstrap-001/logs
+```
+
+Next, build a fresh local bare remote and working repository using Git commands only at `/tmp/forgev2-access-bootstrap-001-fixture`; fail without touching it if that path already exists. Mark all remotes synthetic, make no network requests, run no hooks or inherited scripts. Use a temporary group named `forgev2-wo-access-bootstrap-001` containing only the two service identities:
 
 ```sh
 addgroup --system forgev2-wo-access-bootstrap-001
@@ -113,9 +119,21 @@ adduser forgev2-pl forgev2-wo-access-bootstrap-001
 adduser forgev2-agent forgev2-wo-access-bootstrap-001
 ```
 
-Remove both supplementary memberships with `deluser <account> forgev2-wo-access-bootstrap-001`, then remove the empty fixture group with `delgroup --system --only-if-empty forgev2-wo-access-bootstrap-001`. Do not create a real ForgeV2 worktree.
+Keep the fixture and group available until CGPT has reviewed the frozen fixture snapshot. After snapshot review passes, remove both memberships and the empty group, then remove the fixture by its unique marker and verify cleanup before touching production metadata:
 
-The fixture's checked permission model is: PL-only ownership of the Git administrative directory and local bare remote; a PL-owned worktree root with the temporary group and mode `3770` (setgid and sticky); the `.git` pointer owned by PL and mode `0640`; and only the synthetic source tree group-writable by the WO group (directories setgid). Verify the exact object owners and modes after setup. The sticky root protects the PL-owned `.git` pointer from agent unlink/replacement; it is not accepted as proof by itself. Prove the full positive and negative table below. Do not carry fixture permissions to production worktrees in this WO.
+```sh
+deluser forgev2-pl forgev2-wo-access-bootstrap-001
+deluser forgev2-agent forgev2-wo-access-bootstrap-001
+delgroup --system --only-if-empty forgev2-wo-access-bootstrap-001
+```
+
+Do not create a real ForgeV2 worktree.
+
+The fixture must reproduce the production topology: a root-owned canonical checkout directory and root-owned tracked source; PL-owned Git administrative metadata; a PL-owned sibling worktree parent; separate PL and Engineer UIDs; and a temporary WO group. Create a real linked worktree beneath the fixture's sibling parent. The fixture's checked permission model is: PL-only ownership of Git administrative metadata and the local bare remote; a PL-owned worktree root with the temporary group and mode `3770` (setgid and sticky); the `.git` pointer owned by PL and mode `0640`; and only the synthetic source tree group-writable by the WO group (directories setgid). Verify exact object owners and modes after setup. The sticky root protects the PL-owned `.git` pointer from agent unlink/replacement; it is not accepted as proof by itself.
+
+As PL, test repository safety and the required operations explicitly: inspect the canonical root-owned checkout without changing it; use only the approved explicit Git-directory/worktree operation to create, inspect and remove the fixture worktree; and demonstrate PL can update fixture refs and push to the local bare remote. As administrator, verify the same fixture's expected repository identity, ownership, refs, worktree registration and clean state. As Engineer, demonstrate source-file writes in the assigned fixture worktree while writes to Git administrative metadata, refs, index, hooks, the `.git` pointer, parent and sibling worktrees fail. No `safe.directory` wildcard, broad ownership change, or persistent/global Git configuration change may be added to make a test pass. If Git rejects the planned PL operation under the approved ownership model, stop and report BLOCKED to CGPT; do not weaken the fixture or live boundaries. Do not carry fixture permissions to production worktrees in this WO.
+
+Freeze the fixture setup, command transcript, owner/mode manifest and test results as a read-only fixture evidence snapshot. CGPT reviews that snapshot before the live metadata/worktree-parent changes. If any fixture check fails, do not touch live Git metadata or `/srv/src/forgev2/worktrees`; follow the bounded rollback for accounts and fixture resources already created.
 
 The fixture must demonstrate:
 
@@ -131,11 +149,11 @@ The fixture must demonstrate:
 
 Record test commands, effective UID/GID/groups, filesystem owner/mode observations, exit status and sanitized evidence. If a negative test succeeds unexpectedly, or a positive test cannot be demonstrated, stop; do not weaken permissions to make the test pass. Delete only the uniquely marked disposable fixture after independent review and verify its cleanup. Do not use ACL tooling or install packages; `setfacl`/`getfacl` were not present in the prior read-only inspection.
 
-## 7. Production changes after fixture passes
+## 7. Production changes after fixture review
 
-Re-capture and compare the exact pre-change state immediately before mutation. Stop if it changed. Then, in this order:
+Only after the fixture snapshot receives CGPT review and PASS, re-capture and compare the exact pre-change state immediately before the two live permission changes. Stop if it changed. Accounts and homes already exist from the earlier authorized step. Then:
 
-1. Create the two accounts and their private homes using the commands in §3. Verify `getent passwd`, `id`, `stat`, shell, dynamic IDs and absence from `sudo`.
+1. Reconfirm `getent passwd`, `id`, `stat`, shell, dynamic IDs, group memberships and absence from `sudo` for both service identities.
 2. As root, make only these two filesystem changes, after confirming the exact paths and their expected object types:
 
    ```sh
@@ -145,25 +163,24 @@ Re-capture and compare the exact pre-change state immediately before mutation. S
    ```
 
    The recursive `chown` is strictly confined to the Git administrative directory; it must not follow or include tracked source, linked worktrees outside `.git`, submodule contents or any other path. If inspection finds an unexpected symlink, gitdir indirection, mount, submodule complication, permission requirement, or target state, stop before `chown` and return to CGPT. Preserve existing `.git` mode bits; no other mode changes are authorized by this WO.
-3. Recheck main's tracked tree/content, branch, HEAD, origin, clean state and registered worktrees. Confirm the only ownership differences are within `.git` and the stated worktree parent; no worktree was created.
+3. Recheck main's tracked tree/content, branch, HEAD, origin, clean state and registered worktrees. Confirm the only production ownership/mode differences are within `.git` and the stated worktree parent; no production worktree was created.
 4. Repeat the two separate `runuser` identity/environment checks and independent positive/negative filesystem tests against actual allowed paths. Do not execute GitHub operations, Claude Code, ForgeV2, ForgeV1, or any application code.
 5. Verify Matt's root SSH access still works from a second independent session. SSH configuration and firewall state must be unchanged.
+6. Freeze a read-only administrative evidence manifest at `/var/log/forgev2-access-bootstrap-001/evidence/ADMIN-CANDIDATE-MANIFEST.txt`. It lists the exact final account/group state, allowed ownership/mode changes, repository identity/HEAD/tracked-tree digest, fixture snapshot digest, production checks, and SHA-256 digests of the underlying restricted evidence files. Compute `sha256sum /var/log/forgev2-access-bootstrap-001/evidence/ADMIN-CANDIDATE-MANIFEST.txt`; that digest is the single **Administrative Candidate ID**. Make the manifest and referenced evidence read-only before review. All three independent reviewers assess that same ID. Their role logs are separate from the frozen manifest. Any subsequent account or permission change requires a new manifest/Candidate ID and invalidates every prior reviewer PASS.
 
 The last operation does not install an engine, create a human account, authorize a GitHub credential, or open engineering dispatch. Actual credential provisioning, Claude runtime approval and a PL process launcher remain separate gates.
 
 ## 8. Logs, evidence and communication
 
-Use the dedicated Issue once created for sanitized status and approval provenance. Public repository records must not contain host identity/access data or restricted evidence.
+Use the dedicated Issue once created for sanitized status and approval provenance. Public repository records must not contain host identity/access data or restricted evidence. All WO-specific logs are created only under `/var/log/forgev2-access-bootstrap-001/logs/`, outside `/srv/src/forgev2/main/` and `/srv/forgev2/`. Matt creates the log directory as `root:root` mode `0700`; log files are `root:root` mode `0600`. If the directory exists before this WO, stop rather than reuse it. Create the evidence directory only after final production verification, at `/var/log/forgev2-access-bootstrap-001/evidence/`, with owner `root:root` mode `0700`. No log, manifest, or test artifact may be written into the canonical checkout or engine installation.
 
-Sanitized WO-specific log paths, created only if they do not already exist:
+- `ADMIN.log` — Matt authors and writes the administrative command/results record; CGPT reads.
+- `PL.log` — no PL agent/runtime is dispatched. Matt records `PL not dispatched; specialist invocation count zero` and the administrative coordination state. This is not represented as a PL-authored delivery log or a transfer of PL authority. CGPT/Matt read.
+- `AUDITOR.log` — the appointed independent Auditor authors the findings; Matt stores the reviewer-supplied record verbatim and records its source/identity, receipt time and digest. CGPT/Matt read.
+- `TESTER.log` — the appointed independent Tester authors the fixture and independent verification results; Matt stores the reviewer-supplied record verbatim and records its source/identity, receipt time and digest. CGPT/Matt read.
+- `DEVSECOPS.log` — the appointed independent DevSecOps reviewer authors the security assessment; Matt stores the reviewer-supplied record verbatim and records its source/identity, receipt time and digest. CGPT/Matt read.
 
-- `work-orders/logs/FORGEV2-ACCESS-BOOTSTRAP-001/ADMIN.log` — Matt writes administrative commands/results; CGPT reads.
-- `work-orders/logs/FORGEV2-ACCESS-BOOTSTRAP-001/PL.log` — assigned PL writes persisted specialist execution state and aggregate status; Matt/CGPT read. No AI specialist dispatch is permitted unless the PL counter owner is resolved.
-- `work-orders/logs/FORGEV2-ACCESS-BOOTSTRAP-001/AUDITOR.log` — appointed independent Auditor writes; PL/Matt/CGPT read.
-- `work-orders/logs/FORGEV2-ACCESS-BOOTSTRAP-001/TESTER.log` — appointed independent Tester writes test procedure/results; PL/Matt/CGPT read.
-- `work-orders/logs/FORGEV2-ACCESS-BOOTSTRAP-001/DEVSECOPS.log` — appointed independent DevSecOps reviewer writes; PL/Matt/CGPT read.
-
-No Engineer log is applicable because Engineer is not dispatched. Store detailed pre/post host manifests, access test transcripts and any restricted security data only in Matt's restricted operator-controlled evidence location; do not publish its path or content. Reference it publicly by a non-sensitive evidence identifier. Record each reviewer PASS/FAIL, rationale, evidence reference and candidate identity. Any Engineer change would invalidate prior PASS results and restart applicable assurance; no such change is within scope.
+No Engineer log is applicable because Engineer is not dispatched. Detailed pre/post host manifests and any restricted security data remain in Matt's restricted operator evidence store; do not publish its location or contents. The frozen evidence manifest described in §7 and its referenced restricted files are read-only during review. Its SHA-256 is the single Administrative Candidate ID recorded in each reviewer log and the dedicated Issue. Reviewer reports are separate records and do not change that candidate. Any subsequent account or permission change creates a new candidate identity and invalidates all prior PASS results.
 
 ## 9. Acceptance criteria
 
@@ -186,10 +203,10 @@ If a production mutation has begun and a later acceptance check fails, Matt perf
 
 1. Stop the two service-identity processes. Confirm no running process uses either account.
 2. Preserve restricted logs and evidence outside the homes before account removal.
-3. Restore the exact pre-change ownership/mode manifest: restore `root:root` ownership only within `/srv/src/forgev2/main/.git`; restore `/srv/src/forgev2/worktrees` to its recorded pre-change owner and mode (`root:root`, `0755` only if that was captured). Do not recursively alter the source checkout.
-4. Remove any temporary fixture group memberships and group only after verifying it is empty; remove the fixture only by its unique marker and verify cleanup.
+3. If fixture testing failed **before** production permission changes, do not touch `/srv/src/forgev2/main/.git` or `/srv/src/forgev2/worktrees`; verify they still match the pre-change manifest. If production permission changes began, restore the exact pre-change ownership/mode manifest: restore ownership only within `/srv/src/forgev2/main/.git`; restore `/srv/src/forgev2/worktrees` to its captured owner/mode (`root:root`, `0755` only if that was captured). Do not recursively alter the source checkout.
+4. Remove temporary fixture group memberships and the group only after verifying it is empty; remove the fixture only by its unique marker and verify cleanup.
 5. Remove the two newly created system identities only if they were created by this WO and their homes contain no retained evidence or user data: `deluser --system --remove-home forgev2-agent`, then `deluser --system --remove-home forgev2-pl`. If either matching primary group remains and is empty, remove it with `delgroup --system --only-if-empty <group>`. Otherwise lock/disable the identities, remove grants, preserve data, and report rollback as incomplete for CGPT direction. Do not remove or alter any pre-existing identity.
-6. Re-run repository status, tree/content comparison, worktree listing, path ownership/mode, account/group and root SSH checks. If any baseline cannot be restored exactly, stop and report; no speculative repair.
+6. Retain the root-only `/var/log/forgev2-access-bootstrap-001/` evidence as the rollback record; it is the only intentional new path retained after a rollback. Re-run repository status, tree/content comparison, worktree listing, path ownership/mode, account/group and root SSH checks. If any baseline cannot be restored exactly, stop and report; no speculative repair.
 
 Rollback does not touch `/srv/forgev2/`, `/srv/pacman/`, SSH configuration, credentials, firewall settings or repositories/remotes.
 
