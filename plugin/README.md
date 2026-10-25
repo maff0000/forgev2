@@ -64,7 +64,7 @@ cd "$ROOT" && claude -p \
   --add-dir "$(dirname "$ROOT")/worktrees" \
   --allowedTools "Bash Read Write Edit Glob Grep Agent" \
   --output-format json \
-  "/forgev2:deliver /path/to/WO-123.md"
+  "/forgev2:deliver /path/to/WO-123.md" < /dev/null
 ```
 
 Add `--plugin-dir /path/to/forgev2/plugin` if the plugin is not installed.
