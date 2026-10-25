@@ -15,10 +15,13 @@ This public repository deliberately does **not** publish operator-specific host 
 - [Initial Product Backlog](PRODUCT-BACKLOG.md) — approved at exact commit `071426b4cf2b39c39e6e6dd5be619e8afd06d8cb`; its items are **not authorised Work Orders**.
 - [ForgeV2 decisions](DECISIONS.md) — project-specific direction and clearly distinguished unimplemented mechanisms.
 - [External software register](security/EXTERNAL_CODE_REGISTER.yaml) — incomplete baseline coverage, no invented approval.
+- [Access Control and Security Decision Record](security/ACCESS_CONTROL.md) — approved identity direction, proposed controls, and outstanding verification; it does not claim implementation or runtime approval.
 - [Engine-loading experiment](docs/evidence/ENGINE-LOADING-SPIKE-001.md) — reported disposable experiment and its limits.
 - [Stage 1 environment reconciliation](docs/evidence/STAGE1-ENVIRONMENT-RECONCILIATION-001.md) — approved workspace boundaries and attributed verification status.
 
 [Initiation GitHub Issue #1](https://github.com/maff0000/forgev2/issues/1) preserves the initiation authority, Product Owner approval and CGPT's exact-baseline Stage 1 closure acceptance. No approved engineering Work Order exists. Any engineering activity requires its own approval after the mandatory delivery gates are satisfied. **Do not run inherited ForgeV1 bootstrap scripts or install/upgrade the engine under Stage 1 authority.**
+
+Documentation acceptance records agreed direction; it does not establish that host controls, credentials, runtime security or reviewer readiness have been implemented or verified. Engineering dispatch remains blocked until the applicable Work Order entry gates are independently satisfied and approved.
 
 ## Engine/application separation
 
