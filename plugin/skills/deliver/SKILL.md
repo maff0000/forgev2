@@ -127,6 +127,11 @@ Open items / reason (ESCALATED or BLOCKED only): ...
 Pushed: yes (url) | no (reason)
 ```
 
+The first line of your final message is always exactly `# <WO> - <STATUS>`,
+with nothing before it, even when you stop before a worktree or ledger exists
+(for example at the identity gate or at intake). In that case write `n/a` for
+the fields that don't apply. The Orchestrator machine-parses this line.
+
 ## Stop conditions (return BLOCKED)
 
 Identity gate failure; missing WO fields; contradictory criteria; a required
