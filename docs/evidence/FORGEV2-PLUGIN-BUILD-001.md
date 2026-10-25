@@ -28,7 +28,7 @@ Invocation: `claude -p --plugin-dir plugin --add-dir <worktrees> --allowedTools 
 
 ## Output contract check
 
-With `--output-format json`, stdout is one JSON object, so the status is not the first line of stdout. The contract is in `plugin/README.md` ("Output contract"): parse the JSON, require `type=result`, `subtype=success`, `is_error=false`, and a first `result` line of exactly `# <WO> - <STATUS>`, and cross-check the ledger `outcome` where a ledger exists. Checked against the recorded runs:
+With `--output-format json`, stdout is one JSON object, so the status is not the first line of stdout. The contract is in `plugin/ORCHESTRATOR.md` (section 3): parse the JSON, require `type=result`, `subtype=success`, `is_error=false`, and a first `result` line of exactly `# <WO> - <STATUS>`, and cross-check the ledger `outcome` where a ledger exists. Checked against the recorded runs:
 
 - **WO-CALC-001 and WO-CALC-002:** conform, and the ledger `outcome` is `DELIVERED`.
 - **First WO-WRONG-REPO run:** did **not** conform, because the result began with prose. A validating Orchestrator would have treated it as BLOCKED (malformed), which is safe, but it was a defect. The skill now requires the heading for every outcome. The re-run conforms.

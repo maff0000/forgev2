@@ -55,49 +55,11 @@ BROWSER: yes                # optional: browser behaviour is material
 ...
 ```
 
-## Running it (what the Orchestrator does)
+## Running it (Orchestrator handoff)
 
-One fresh PL process per Work Order:
-
-```sh
-cd "$ROOT" && claude -p \
-  --add-dir "$(dirname "$ROOT")/worktrees" \
-  --allowedTools "Bash Read Write Edit Glob Grep Agent" \
-  --output-format json \
-  "/forgev2:deliver /path/to/WO-123.md" < /dev/null
-```
-
-Add `--plugin-dir /path/to/forgev2/plugin` if the plugin is not installed.
-
-### Output contract
-
-With `--output-format json`, stdout is **one JSON object**, not a status line.
-The Orchestrator must parse it and validate it before acting:
-
-1. The process exited 0 and stdout parses as JSON.
-2. `type == "result"`, `subtype == "success"` and `is_error == false`.
-3. The first line of the `result` string matches exactly
-   `# <WO> - (DELIVERED|ESCALATED|BLOCKED)`, and `<WO>` is the Work Order it sent.
-4. If the WO reached the worktree stage,
-   `<worktrees>/<WO>/.forge/<WO>/ledger.json` has `"outcome"` equal to that
-   status. The ledger is authoritative. A `BLOCKED` result at the identity gate
-   has no ledger.
-
-If any check fails, treat the run as **BLOCKED (malformed PL result)**, keep
-stdout/stderr, and do not retry automatically. `session_id` and
-`total_cost_usd` are useful to log. `total_cost_usd` is Claude Code's modelled
-API-equivalent figure, not necessarily a separate charge on a subscription.
-
-Paste this into the Orchestrator's role file:
-
-> **Software changes go to ForgeV2.** Write a Work Order file in the format
-> above, then start a fresh PL with the command above (one process per WO; never
-> reuse a session). Parse stdout as JSON and validate it as in "Output contract"
-> (README); anything that fails validation is BLOCKED. Then act on the status:
-> `DELIVERED` - report the branch/PR to Matt for merge.
-> `ESCALATED` - read the open findings; either issue a new, narrower WO or ask Matt.
-> `BLOCKED` - fix the named precondition if it is within your authority, otherwise ask Matt.
-> Do not edit ForgeV2's ledger or branches yourself.
+How an Orchestrator starts the PL, passes a Work Order, validates the JSON
+result and handles `DELIVERED` / `ESCALATED` / `BLOCKED` is described in
+[`ORCHESTRATOR.md`](ORCHESTRATOR.md).
 
 ## Security model
 
