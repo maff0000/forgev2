@@ -8,6 +8,8 @@ This public repository deliberately does **not** publish operator-specific host 
 
 **Governing framework:** [FOUNDRY](https://github.com/maff0000/foundry) at `aee86185aac6aa0d2ab7a243138c423292af191a` (Stage 1 v0.4 and Amendments 001–005). FOUNDRY supplies role authority, product-record standards, secure engineering and Work Order gates; ForgeV2 supplies delivery capability once implemented.
 
+Claude installation guidance: [INSTALL.md](INSTALL.md). The ForgeV2 plugin is in [`plugin/`](plugin/README.md), pending independent review.
+
 ## Authoritative project records
 
 - [Project Initiation Mandate](PROJECT-INITIATION-MANDATE.md) — project evidence, Stage 1 closure-gate assessment and **bounded initiation authority only**.

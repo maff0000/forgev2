@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""forge-commit: PL commit of the current worktree state as the review candidate.
+
+Usage: forge-commit -m MESSAGE
+While the Work Order is open: stages all changes except .forge/, blocks on any
+gitleaks finding, commits, and records HEAD as the candidate (invalidating
+earlier reviewer PASS results). After forge-ledger close: commits only the
+.forge/ records, so no unreviewed code can follow the reviewed candidate.
+Never bypasses hooks.
+"""
+import argparse
+import shutil
+import subprocess
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "lib"))
+import forgelib as F  # noqa: E402
+
+
+def main():
+    a = argparse.ArgumentParser()
+    a.add_argument("-m", "--message", required=True)
+    a.add_argument("--ledger")
+    o = a.parse_args()
+    path = o.ledger or F.ledger_for_session(os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
+    if not path:
+        raise F.ForgeError("no Work Order is bound to this session; run forge-start first")
+    with F.locked_ledger(path, write=False) as d:
+        wt, repo, root, branch, closed = d["worktree"], d["repo"], d["root"], d["branch"], d["outcome"]
+    F.check_repo(root, repo)
+    if F.git("branch", "--show-current", cwd=wt) != branch:
+        raise F.ForgeError(f"worktree is not on {branch}")
+    if not shutil.which("gitleaks"):
+        raise F.ForgeError("gitleaks is not installed; refusing to commit unscanned changes")
+    if closed:
+        if F.git("status", "--porcelain", "--", ".", ":!.forge", cwd=wt):
+            raise F.ForgeError("Work Order is closed: only .forge/ records may be committed; "
+                               "other changes are unreviewed")
+        F.git("add", "-A", "--", ".forge", cwd=wt)
+    else:
+        F.git("add", "-A", "--", ".", ":!.forge", cwd=wt)
+    if not F.git("diff", "--cached", "--name-only", cwd=wt):
+        raise F.ForgeError("nothing to commit")
+    scan = subprocess.run(["gitleaks", "git", "--pre-commit", "--staged", "--redact", "--no-banner", wt],
+                          capture_output=True, text=True)
+    if scan.returncode != 0:
+        F.git("reset", "-q", cwd=wt)
+        sys.stderr.write(scan.stdout + scan.stderr)
+        raise F.ForgeError("gitleaks reported a likely secret; nothing was committed")
+    F.git("commit", "-q", "-m", o.message, cwd=wt)
+    head = F.git("rev-parse", "HEAD", cwd=wt)
+    if closed:
+        F.emit({"records_commit": head, "outcome": closed})
+        return
+    with F.locked_ledger(path) as d:
+        d["candidate"] = head
+        d["events"].append({"t": F.now(), "type": "candidate", "sha": head, "round": d["round"]})
+        F.emit({"candidate": head, "round": d["round"], "decision": F.decide(d)[0]})
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except F.ForgeError as e:
+        print(f"forge-commit: {e}", file=sys.stderr)
+        sys.exit(1)

@@ -1,0 +1,9 @@
+{
+  "name": "forgev2",
+  "displayName": "ForgeV2",
+  "version": "0.1.0",
+  "description": "AI-first delivery engine: a Project Lead drives Engineer, Auditor, Tester and DevSecOps through a bounded correction loop and returns a reviewed Git branch.",
+  "author": { "name": "Matthew Scott" },
+  "repository": "https://github.com/maff0000/forgev2",
+  "license": "UNLICENSED"
+}
