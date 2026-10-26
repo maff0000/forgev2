@@ -269,6 +269,17 @@ class IdentityGate(Base):
         self.assertEqual(os.listdir(os.path.join(self.wt, ".forge")), [])
         self.assertFalse(os.path.realpath(self.scratch).startswith(os.path.realpath(self.env["FORGE_STATE_DIR"])))
         self.assertEqual(os.stat(self.env["FORGE_STATE_DIR"]).st_mode & 0o777, 0o700)
+        for top, dirs, _ in os.walk(self.env["FORGE_STATE_DIR"]):
+            for x in dirs:
+                self.assertEqual(os.stat(os.path.join(top, x)).st_mode & 0o777, 0o700, os.path.join(top, x))
+
+    def test_state_directory_readable_by_others_refused(self):
+        os.makedirs(self.env["FORGE_STATE_DIR"], mode=0o700)
+        os.chmod(self.env["FORGE_STATE_DIR"], 0o755)
+        r = self.start()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("must be owned by this account with mode 0700", r.stderr)
+        self.assertEqual(self.sh("git branch --list 'forge/*'", cwd=self.root).stdout.strip(), "")
 
     def test_rejections(self):
         cases = {
@@ -280,6 +291,19 @@ class IdentityGate(Base):
             r = self.start(*c.get("extra", ()), repo=c.get("repo", OWNER_REPO))
             self.assertEqual(r.returncode, 1, label)
             self.assertIn("REJECTED", r.stderr, label)
+
+    def test_missing_git_identity_refused_before_any_change(self):
+        env = {k: v for k, v in self.env.items() if not k.startswith(("GIT_AUTHOR_", "GIT_COMMITTER_"))}
+        with open(os.path.join(self.tmp, ".gitconfig"), "w") as f:
+            f.write("[user]\n\tuseConfigOnly = true\n")
+        r = self.start(env=env)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("no Git author identity", r.stderr)
+        self.assertEqual(self.sh("git branch --list 'forge/*'", cwd=self.root).stdout.strip(), "")
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "src", "worktrees")))
+        with open(os.path.join(self.tmp, ".gitconfig"), "a") as f:
+            f.write("\tname = t\n\temail = t@invalid.example\n")
+        self.assertEqual(self.start(env=env).returncode, 0)
 
     def test_rejects_lookalike_remote(self):
         self.sh("git remote set-url origin https://github.com.evil.example/fixture-owner/calc.git", cwd=self.root)

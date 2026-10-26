@@ -28,6 +28,10 @@ def main():
         raise F.ForgeError(f"invalid Work Order id {o.wo!r}")
     facts = F.check_repo(o.root, o.repo, o.known_commit)
     root = facts["root"]
+    for ident in ("GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT"):
+        if F.git_run("var", ident, cwd=root).returncode:
+            raise F.ForgeError("this account has no Git author identity; set user.name and user.email "
+                               "for it before starting a Work Order (INSTALL.md)")
     branch = f"forge/{o.wo}"
     wt_parent = os.path.realpath(o.worktrees or os.path.join(os.path.dirname(root), "worktrees"))
     wt = os.path.join(wt_parent, o.wo)

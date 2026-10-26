@@ -19,13 +19,16 @@ Prerequisites on the execution host: the one-time host set-up below, `git`, `pyt
 
 ## One-time host set-up (root, with Matt's approval)
 
-ForgeV2 runs the PL and every specialist as the existing non-root `forgev2-pl` account (0700 home), under one Claude login. Specialists are confined by Claude Code's sandbox, which needs bubblewrap and socat. Claude carries out steps 1-2 and records the output; step 3 is Matt's.
+ForgeV2 runs the PL and every specialist as the existing non-root `forgev2-pl` account (0700 home), under one Claude login. Specialists are confined by Claude Code's sandbox, which needs bubblewrap and socat. Claude carries out steps 1-2b and records the output; step 3 is Matt's.
 
 ```sh
 # 1. Sandbox dependencies (Debian packages)
 apt-get install bubblewrap socat
 # 2. Claude Code for the PL account: a root-owned copy of the verified binary already installed for root
 install -o root -g root -m 0755 ~/.local/share/claude/versions/<version> /usr/local/bin/claude
+# 2b. Git author identity for ForgeV2's commits (forge-start refuses to start without one)
+sudo -u forgev2-pl -H git config --global user.name "<name>"
+sudo -u forgev2-pl -H git config --global user.email "<email>"
 ```
 
 3. **Matt** logs `forgev2-pl` into his existing subscription, once (one browser sign-in; the login persists between Work Orders):
