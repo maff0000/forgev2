@@ -1,7 +1,81 @@
 # FORGEV2-PLUGIN-BUILD-001 — plugin build and test evidence
 
 **Date:** 2026-10-25 (UTC) · **Runtime:** Claude Code 2.1.310 · **Base:** `66d3b88` + INSTALL.md candidate `7ef1e06`
-**Status:** v0.2 candidate (correction A). Not accepted; not deployed. Process isolation (B) not yet implemented.
+**Status:** v0.3 candidate (one Claude login; specialists sandboxed under the PL account). Not accepted; not deployed. Updated 2026-10-26.
+
+## v0.3: one login, specialists sandboxed (2026-10-26)
+
+Architect decision "Option 1": `forgev2-pl` is ForgeV2's only Claude login. The PL
+and every specialist run as that account; each specialist is a fresh `claude -p`
+process started by `forge-dispatch` in Claude Code's sandbox, which must start or
+the run stops. This replaces Stage B (`faaff4d`, specialists as a second Unix
+account through a sudo launcher), which needed a second login. Same-account
+sandboxing is **weaker** than separate Unix accounts: see the README security model.
+
+### Host changes (logged on the host)
+
+| Change | Notes |
+| --- | --- |
+| `apt-get install bubblewrap` (0.8.0-2+deb12u1) | Not setuid; socat 1.7.4.4-2 was already installed |
+| Stage B removed | sudo rule (`visudo -c` OK, `forgev2-pl` has no sudo rights), launcher directory, group `forgev2-work`, and the agent account's unused Claude config. `/usr/local/bin/claude` (root-owned copy of the verified binary) stays |
+| `forgev2-pl` logged in once by Matt | Login persisted across every run below; no per-WO login |
+| Git author identity for `forgev2-pl` | Needed by `forge-commit`; now INSTALL.md step 2b |
+| Stale `~/.local/state/forgev2` removed | Left at mode 755 by a 2026-10-25 v0.1 run (obsolete layout); `forge-start` correctly refused it |
+
+### Sandbox findings
+
+- **Gap found and fixed:** Claude Code's sandbox always allows writes to the
+  working directory and to its repository's Git directory. Specialists therefore
+  start in the scratch directory, and the worktree and common Git directories are
+  explicitly write-denied. Caught by the host test before the fix.
+- Sandboxed commands see two values the sandbox sets itself: its proxy password
+  (the proxy allows no hosts) and its session-inbox token. Unix sockets are
+  blocked, so the token is unusable; both are probed.
+- With bubblewrap unavailable, Claude refuses to start the specialist
+  (`failIfUnavailable`); nothing runs unsandboxed.
+
+### Checks
+
+| Check | Result |
+| --- | --- |
+| `python3 -m unittest discover -s tests` | 85 tests OK |
+| Sandbox-settings mutations (13, each disabled individually) | 13/13 make at least one test fail |
+| New tests from the live runs (identity precheck, state-directory mode) | Each fails when its check is removed |
+| `tests/host/sandbox-boundary.sh plugin` as `forgev2-pl`, real Engineer/Auditor/Tester sessions | Before Stage B removal: 114/115 (the one failure: the old sudo rule still present). After removal: run 1 87/115, run 2 **115/115** |
+| `claude plugin validate plugin` | Passed; one cosmetic warning (`ICON_MISSING`) |
+
+The failed host run (87/115) was not a boundary failure: the Auditor model
+declined to run the probe script, treating the self-test prompt as an injected
+task, so all its probes were missing and the test counted them as failures
+(missing results never count as passes). The Engineer and Tester checks passed in
+that run. The re-run, with no change, passed every check. The host test depends
+on the model choosing to run the probe.
+
+### Live headless runs, v0.3 (fixture `forgev2-fixture/calc`, `PUSH: no`, PL as `forgev2-pl`, started with the ORCHESTRATOR.md command)
+
+| Work Order | Result | Notes |
+| --- | --- | --- |
+| WO-B-001 `clamp()`, attempt 1 | BLOCKED | `forge-start` refused the stale 755 state directory (above) |
+| WO-B-001, attempt 2 | BLOCKED | No Git identity for `forgev2-pl`; the first `forge-commit` failed after the Engineer had run. Fixed: `forge-start` now refuses up front (`389c2f9`) |
+| WO-B-001, attempt 3 | DELIVERED, 1 round, 1/1/1/1 | Three PASS results on the candidate; records commit holds only `.forge/WO-B-001/` |
+| WO-B-002 `ratio_percent()`, **fault injection**: Engineer told to omit criterion 2 in round 1 only | DELIVERED, **2 rounds, 2/2/2/2** | Auditor and Tester independently raised the omission as blocking (DevSecOps: advisory); correction became a new candidate; all three re-reviewed and passed |
+| WO-B-003, `REPO: forgev2-fixture/calc-prod` against the `calc` checkout | BLOCKED at the identity gate | No branch, worktree, scratch or ledger created; refs unchanged |
+
+In every run the PL changed Git state only through `forge-*` (its direct Git use
+was read-only `log`/`status`/`ls-files`), and never ran project code. No credential
+string from the PL's Claude login appears anywhere in the fixture's history.
+The fault injection used an extra `--append-system-prompt` on the test command
+only. Modelled cost: $0.37 (WO-B-001), $0.66 (WO-B-002), $0.15 (WO-B-003).
+
+### Not demonstrated (v0.3)
+
+- A handoff from Matt's real Orchestrator: the PL was started with the documented
+  command by the build session, not by the Orchestrator.
+- Push and PR creation through `forge-push` (all runs `PUSH: no`).
+- Real-browser verification (no browser tooling on this host).
+- Isolation against a defect in Claude Code's sandbox or permission checks, in
+  bubblewrap, or in the kernel: all of these run in the account that holds the
+  credentials.
 
 ## Correction A (v0.2): review findings and resolution
 
