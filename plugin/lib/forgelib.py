@@ -1,14 +1,18 @@
-"""ForgeV2 shared helpers: repository identity, ledger, Git and gitleaks wrappers.
+"""ForgeV2 shared helpers: repository identity, ledger, Git, gitleaks and dispatch wrappers.
 
-Standard library only. The ledger lives in the PL's private state directory,
-never in a worktree, and every change to it is made under an exclusive lock
-with an atomic replace.
+Standard library only. The ledger and delivery records live in the PL's private
+state directory, never in a worktree, and every change to the ledger is made
+under an exclusive lock with an atomic replace. Specialists run as a separate
+Unix account through a root-owned launcher (forge-dispatch); the worktree is
+shared with that account through a group, everything else stays PL-only.
 """
 import fcntl
+import grp
 import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -25,6 +29,14 @@ SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$")
 SESSION_RE = re.compile(r"^[A-Za-z0-9-]{8,128}$")
 OWNER_NAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$")
 PROTECTED_BRANCHES = ("main", "master")
+
+# Process isolation: specialists run as AGENT_USER via the root-owned launcher
+# (sudo rule: forgev2-pl may run only LAUNCHER_DIR/agent-run, only as AGENT_USER).
+AGENT_USER = "forgev2-agent"
+SHARED_GROUP = "forgev2-work"
+LAUNCHER_DIR = "/usr/local/libexec/forgev2"
+PLUGIN_ROOT = os.path.dirname(LIB)
+MAX_PROMPT = 256 * 1024
 
 # gitleaks binaries accepted for the commit and push scans (requirement 5).
 # Add a digest only after verifying the release checksum; see INSTALL.md.
@@ -194,22 +206,151 @@ def bind_session(session_id, path):
     _atomic_write(p, path + "\n")
 
 
-def records_dir(d):
-    return os.path.join(d["worktree"], ".forge", d["wo"])
+def records_root(root, wo):
+    key = hashlib.sha256(os.path.realpath(root).encode()).hexdigest()[:16]
+    return os.path.join(state_dir(), "records", key, wo)
+
+
+def dispatch_dir(ledger):
+    """Raw specialist outputs, written only by forge-dispatch, beside the ledger."""
+    return os.path.join(os.path.dirname(ledger), "dispatch")
+
+
+RECORD_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 
 
 def record_paths_ok(d, paths):
     """Only the delivery record files may follow the reviewed candidate."""
-    ok = re.compile(rf"^\.forge/{re.escape(d['wo'])}/(ledger\.json|REPORT\.md|reviews/[A-Za-z0-9._-]+\.md)$")
+    ok = re.compile(rf"^\.forge/{re.escape(d['wo'])}/(ledger\.json|REPORT\.md|prompts/[A-Za-z0-9._-]+\.md"
+                    r"|dispatch/[0-9]+-[a-z]+\.json)$")
     return all(ok.match(p) for p in paths)
+
+
+def _pl_dir_at(parent_fd, name):
+    """Open (creating if absent) a PL-owned directory without following symlinks."""
+    try:
+        os.mkdir(name, 0o755, dir_fd=parent_fd)
+    except FileExistsError:
+        pass
+    replaced = ForgeError(f"{name} in the worktree record path is not a PL-owned, PL-only directory; "
+                          "it was replaced from the agent account - the Work Order must be BLOCKED")
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+    except OSError:
+        raise replaced
+    st = os.fstat(fd)
+    if st.st_uid != os.geteuid() or st.st_mode & 0o022:
+        os.close(fd)
+        raise replaced
+    return fd
+
+
+def publish_records(d, ledger):
+    """Copy the ledger, REPORT.md, prompts and raw dispatch outputs into <worktree>/.forge/<WO>/.
+
+    The worktree is writable by the agent account, so every path component is opened
+    without following symlinks and must be a PL-owned directory, and every file is
+    created fresh. Returns the published paths relative to the worktree."""
+    rec = d["records"]
+    if not os.path.isfile(os.path.join(rec, "REPORT.md")):
+        raise ForgeError(f"write the delivery report to {rec}/REPORT.md first")
+    files = {"ledger.json": _dump(d).encode()}
+    for sub, pattern in (("", r"^REPORT\.md$"), ("prompts", r"\.md$")):
+        src = os.path.join(rec, sub)
+        for name in sorted(os.listdir(src)) if os.path.isdir(src) else []:
+            p = os.path.join(src, name)
+            if os.path.isdir(p) and not sub and name == "prompts":
+                continue
+            if not RECORD_NAME.match(name) or not re.search(pattern, name) or not os.path.isfile(p) \
+                    or os.path.islink(p):
+                raise ForgeError(f"unexpected file in the records directory: {p} "
+                                 "(only REPORT.md and prompts/*.md are published)")
+            with open(p, "rb") as f:
+                files[os.path.join(sub, name)] = f.read()
+    disp = dispatch_dir(ledger)
+    for name in sorted(os.listdir(disp)) if os.path.isdir(disp) else []:
+        with open(os.path.join(disp, name), "rb") as f:
+            files[os.path.join("dispatch", name)] = f.read()
+    fds = [os.open(d["worktree"], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)]
+    try:
+        for name in (".forge", d["wo"]):
+            fds.append(_pl_dir_at(fds[-1], name))
+        subdirs = {}
+        for rel, data in files.items():
+            sub, name = os.path.split(rel)
+            if sub and sub not in subdirs:
+                subdirs[sub] = _pl_dir_at(fds[-1], sub)
+            fd = subdirs[sub] if sub else fds[-1]
+            try:
+                os.unlink(name, dir_fd=fd)
+            except FileNotFoundError:
+                pass
+            out = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=fd)
+            with os.fdopen(out, "wb") as f:
+                f.write(data)
+        fds.extend(subdirs.values())
+    finally:
+        for fd in fds:
+            os.close(fd)
+    return [f".forge/{d['wo']}/{rel}" for rel in files]
+
+
+# --- sharing the worktree with the agent account ---------------------------
+
+def shared_gid():
+    try:
+        gid = grp.getgrnam(SHARED_GROUP).gr_gid
+    except KeyError:
+        raise ForgeError(f"group {SHARED_GROUP} does not exist; ForgeV2 needs the host set-up in INSTALL.md")
+    if os.geteuid() != 0 and gid not in os.getgroups():
+        raise ForgeError(f"this account is not a member of {SHARED_GROUP}")
+    return gid
+
+
+def _set(path, gid, add, remove=0):
+    st = os.lstat(path)
+    if stat.S_ISLNK(st.st_mode):
+        return
+    os.chown(path, -1, gid, follow_symlinks=False)
+    os.chmod(path, (stat.S_IMODE(st.st_mode) | add) & ~remove)
+
+
+def share_worktree(wt_parent, wt, scratch):
+    """Group-share the worktree and scratch with the agent account.
+
+    The agent may change files in the worktree and scratch. It may not create
+    worktrees, replace the worktree's .git pointer in place, or write the
+    .forge record directories, which stay PL-only."""
+    gid = shared_gid()
+    for p in (wt_parent, os.path.dirname(scratch)):
+        _set(p, gid, 0o2750, 0o027)
+    _set(scratch, gid, 0o2770, 0o007)
+    for top, dirs, files in os.walk(wt):
+        rel = os.path.relpath(top, wt)
+        if rel == "." and ".forge" in dirs:
+            dirs.remove(".forge")
+            for t2, _, f2 in os.walk(os.path.join(wt, ".forge")):
+                for p in [t2] + [os.path.join(t2, f) for f in f2]:
+                    _set(p, os.lstat(p).st_gid, 0, 0o022)
+        _set(top, gid, 0o2770, 0o007)
+        for f in files:
+            if rel == "." and f == ".git":
+                _set(os.path.join(top, f), os.lstat(os.path.join(top, f)).st_gid, 0, 0o022)
+                continue
+            _set(os.path.join(top, f), gid, 0o060, 0o002)
+    fd = os.open(wt, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.close(_pl_dir_at(fd, ".forge"))
+    finally:
+        os.close(fd)
 
 
 # --- ledger ---------------------------------------------------------------
 
-def new_ledger(wo, facts, worktree, git_dir, branch, base, base_sha, known_commit, scratch):
+def new_ledger(wo, facts, worktree, git_dir, branch, base, base_sha, known_commit, scratch, records):
     return {"wo": wo, "repo": facts["repo"], "root": facts["root"], "worktree": worktree, "git_dir": git_dir,
             "common_dir": facts["common_dir"], "branch": branch, "base": base, "base_sha": base_sha,
-            "known_commit": known_commit, "scratch": scratch, "limit": LIMIT, "created": now(),
+            "known_commit": known_commit, "scratch": scratch, "records": records, "limit": LIMIT, "created": now(),
             "counts": {r: 0 for r in ROLES}, "candidate": None, "round": 0, "events": [], "outcome": None}
 
 
@@ -332,6 +473,14 @@ def record(data, role, outcome, findings=(), note=""):
     slot = slots[-1]
     if role in REVIEWERS and slot["candidate"] != data["candidate"]:
         raise ForgeError("the candidate changed after this reviewer was dispatched; its result is void")
+    ran = [e for e in data["events"] if e["type"] == "dispatched" and e["spawn"] == slot["id"]]
+    if not ran and outcome != "void":
+        raise ForgeError(f"the {role} dispatch has not returned; record 'void' if it was lost")
+    reported = ran[-1]["reported"] if ran else None
+    if (role, outcome) in (("engineer", "completed"),) + tuple((r, "pass") for r in REVIEWERS) \
+            and reported != outcome:
+        raise ForgeError(f"the {role} reported {reported or 'no recognisable status line'}, so '{outcome}' "
+                         "cannot be recorded for it")
     data["events"].append({"t": now(), "type": "result", "spawn": slot["id"], "role": role, "outcome": outcome,
                            "findings": parsed, "note": note, "round": slot["round"],
                            "candidate": slot["candidate"]})
@@ -393,6 +542,50 @@ def decide(data):
     if blocking:
         return "CORRECT", f"route to Engineer: {', '.join(blocking)}"
     return "REVIEW", f"re-run after resolving the environment for: {', '.join(inconclusive)}"
+
+
+# --- dispatch ---------------------------------------------------------------
+
+_REPORTED = {"engineer": re.compile(r"^[\s>*`#]*STATUS\s*:\s*\**\s*(completed|blocked|failed)\b", re.I | re.M)}
+for _r in REVIEWERS:
+    _REPORTED[_r] = re.compile(r"^[\s>*`#]*VERDICT\s*:\s*\**\s*(PASS|FINDINGS|INCONCLUSIVE)\b", re.I | re.M)
+
+
+def parse_reported(role, text):
+    """The status a specialist reported in its own final message, or None if absent or ambiguous."""
+    got = {m.lower() for m in _REPORTED[role].findall(text or "")}
+    return got.pop() if len(got) == 1 else None
+
+
+def _sha256_file(path):
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def verify_install(launcher_dir=LAUNCHER_DIR, plugin_root=PLUGIN_ROOT):
+    """The installed launcher and roles must be root-owned copies of this plugin version's files."""
+    pairs = [(os.path.join(launcher_dir, "agent-run"), os.path.join(plugin_root, "libexec", "agent-run"))]
+    pairs += [(os.path.join(launcher_dir, "roles", f"{r}.md"), os.path.join(plugin_root, "roles", f"{r}.md"))
+              for r in ROLES]
+    for installed, source in pairs:
+        for q in (installed, os.path.dirname(installed)):
+            try:
+                st = os.lstat(q)
+            except FileNotFoundError:
+                raise ForgeError(f"{q} is missing: the ForgeV2 agent launcher is not installed (INSTALL.md)")
+            if stat.S_ISLNK(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o022:
+                raise ForgeError(f"{q} must be root-owned and not group/world-writable")
+        if _sha256_file(installed) != _sha256_file(source):
+            raise ForgeError(f"{installed} differs from this plugin's {source}; reinstall the launcher (INSTALL.md)")
+
+
+def launcher_cmd():
+    """FORGE_LAUNCHER replaces the sudo launcher in tests; the ledger records that it was used."""
+    test = os.environ.get("FORGE_LAUNCHER")
+    if test:
+        return [test], test
+    verify_install()
+    return ["/usr/bin/sudo", "-n", "-u", AGENT_USER, os.path.join(LAUNCHER_DIR, "agent-run")], None
 
 
 # --- gitleaks ---------------------------------------------------------------

@@ -6,9 +6,10 @@
   forge-ledger close DELIVERED|ESCALATED|BLOCKED [--note TEXT]
 
 Each dispatch is counted when the PL makes it, and each result must match exactly
-one dispatch (OUTCOME 'void' when a dispatch produced no result). The 5th dispatch
-of any role is refused. A closed Work Order cannot be changed. Closing writes a
-copy of the ledger to <worktree>/.forge/<WO>/ledger.json for the records commit.
+one forge-dispatch run (OUTCOME 'void' when a dispatch produced no result); a
+'pass' or 'completed' is accepted only if the specialist's own final message
+reported it. The 5th dispatch of any role is refused. A closed Work Order cannot
+be changed; forge-commit then publishes the ledger and records to the branch.
 """
 import argparse
 import os, sys
@@ -48,16 +49,12 @@ def main():
                     raise F.ForgeError("cannot close DELIVERED: the worktree is not exactly the reviewed candidate")
             d["outcome"] = o.outcome
             d["events"].append({"t": F.now(), "type": "close", "outcome": o.outcome, "note": o.note})
-            rec = F.records_dir(d)
-            os.makedirs(rec, exist_ok=True)
-            with open(os.path.join(rec, "ledger.json"), "w") as f:
-                f.write(F._dump(d))
         decision, reason = F.decide(d)
         F.emit({"wo": d["wo"], "round": d["round"], "candidate": d["candidate"],
                 "counts": d["counts"], "remaining": {k: F.LIMIT - v for k, v in d["counts"].items()},
                 "pending": [e["role"] for e in F.pending(d)],
                 "needs_review": F.needs_review(d) if decision == "REVIEW" else [],
-                "decision": decision, "reason": reason, "outcome": d["outcome"]})
+                "decision": decision, "reason": reason, "outcome": d["outcome"], "records": d["records"]})
 
 
 if __name__ == "__main__":

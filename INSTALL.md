@@ -10,12 +10,41 @@ ForgeV2 is **AI-first**. This is a task list for Claude, **not** a self-installe
 claude plugin validate <checkout>/plugin            # must pass
 claude plugin marketplace add <checkout>            # or: maff0000/forgev2 (GitHub)
 claude plugin install forgev2@forgev2               # or load per run with --plugin-dir <checkout>/plugin
-claude plugin details forgev2                       # expect skill deliver; agents engineer, auditor, tester, devsecops
+claude plugin details forgev2                       # expect skill deliver and the PreToolUse hook
 python3 -m unittest discover -s <checkout>/tests    # plugin self-tests
 sudo <checkout>/tests/host/os-boundary.sh <checkout>/plugin   # execution host only
 ```
 
-Prerequisites on the execution host: Claude Code with Matt's existing login for the account that runs the PL, `git`, `python3`, gitleaks installed root-owned at `/usr/local/bin/gitleaks` from the official release after checking the archive against the release-published SHA-256 (v8.30.1 linux x64: archive `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`, binary `88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509`; the plugin refuses any other build unless its SHA-256 is listed in `FORGE_GITLEAKS_SHA256`), a non-root PL account, and push access for that account to the target repository.
+Prerequisites on the execution host: the one-time host set-up below, `git`, `python3`, gitleaks installed root-owned at `/usr/local/bin/gitleaks` from the official release after checking the archive against the release-published SHA-256 (v8.30.1 linux x64: archive `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`, binary `88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509`; the plugin refuses any other build unless its SHA-256 is listed in `FORGE_GITLEAKS_SHA256`), and push access for `forgev2-pl` to the target repository.
+
+## One-time host set-up (root, with Matt's approval)
+
+ForgeV2 runs the PL as `forgev2-pl` and every specialist as `forgev2-agent` (both existing system accounts with 0700 homes). Claude carries out steps 1-4 and records the output; step 5 is Matt's.
+
+```sh
+# 1. Shared group for the worktrees
+groupadd --system forgev2-work
+usermod -aG forgev2-work forgev2-pl; usermod -aG forgev2-work forgev2-agent
+# 2. Claude Code for both accounts: a root-owned copy of the verified binary already installed for root
+install -o root -g root -m 0755 ~/.local/share/claude/versions/<version> /usr/local/bin/claude
+# 3. The launcher and role definitions, from the reviewed checkout
+install -d -o root -g root -m 0755 /usr/local/libexec/forgev2 /usr/local/libexec/forgev2/roles
+install -o root -g root -m 0755 <checkout>/plugin/libexec/agent-run /usr/local/libexec/forgev2/
+install -o root -g root -m 0644 <checkout>/plugin/roles/*.md /usr/local/libexec/forgev2/roles/
+# 4. The sudo rule: the PL may run only the launcher, only as the agent account
+echo 'forgev2-pl ALL=(forgev2-agent) NOPASSWD: /usr/local/libexec/forgev2/agent-run' > /tmp/forgev2.sudoers
+visudo -cf /tmp/forgev2.sudoers && install -o root -g root -m 0440 /tmp/forgev2.sudoers /etc/sudoers.d/forgev2
+visudo -c && sudo -l -U forgev2-pl
+```
+
+5. **Matt** logs each account into his existing subscription (one browser sign-in each; no login is copied between accounts):
+
+```sh
+sudo -u forgev2-pl -H sh -c 'cd && DISABLE_AUTOUPDATER=1 /usr/local/bin/claude auth login'
+sudo -u forgev2-agent -H sh -c 'cd && CLAUDE_CONFIG_DIR=$HOME/.claude DISABLE_AUTOUPDATER=1 /usr/local/bin/claude auth login'
+```
+
+The agent account's login must be in `/var/lib/forgev2/agent/.claude` (hence `CLAUDE_CONFIG_DIR`), because the launcher gives every specialist run a fresh, empty HOME and points Claude at that directory. After any plugin update, re-run step 3; `forge-dispatch` refuses to start specialists while the installed launcher or roles differ from the plugin's copies. Verify with `sudo <checkout>/tests/host/os-boundary.sh <checkout>/plugin`.
 
 ## Matt's one-line request
 

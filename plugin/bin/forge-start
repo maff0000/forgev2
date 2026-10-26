@@ -4,7 +4,9 @@
 Usage: forge-start --wo ID --repo OWNER/NAME --root PROJECT_ROOT [--base BRANCH]
                    [--known-commit SHA] [--worktrees DIR]
 Re-running for an existing Work Order resumes it; execution counts are never reset.
-The ledger is kept in the PL's private state directory, outside the worktree.
+The ledger and the delivery records are kept in the PL's private state directory,
+outside the worktree. The worktree and a scratch directory are shared with the
+agent account through the forgev2-work group; Git metadata and .forge/ are not.
 """
 import argparse
 import os, sys
@@ -45,10 +47,13 @@ def main():
             raise F.ForgeError(f"base already contains records for {o.wo}; use a new Work Order id")
         if F.git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", cwd=root, check=False):
             raise F.ForgeError(f"branch {branch} already exists without a ledger; resolve manually")
+        F.shared_gid()
+        scratch = os.path.join(wt_parent, ".forge-scratch", o.wo)
         try:
             os.makedirs(wt_parent, exist_ok=True)
-            scratch = os.path.join(wt_parent, ".forge-scratch", o.wo)
-            os.makedirs(scratch, mode=0o700, exist_ok=True)
+            if os.path.lexists(scratch):
+                raise F.ForgeError(f"{scratch} already exists; use a new Work Order id")
+            os.makedirs(scratch, mode=0o700)
         except OSError as e:
             raise F.ForgeError(f"cannot create the worktree area {wt_parent}: {e}")
         F.git("worktree", "add", "-q", "-b", branch, wt, base_sha, cwd=root)
@@ -57,7 +62,15 @@ def main():
         git_dir = os.path.realpath(F.git("rev-parse", "--absolute-git-dir", cwd=wt))
         if os.path.dirname(git_dir) != os.path.join(facts["common_dir"], "worktrees"):
             raise F.ForgeError(f"unexpected worktree Git directory {git_dir}")
-        d = F.new_ledger(o.wo, facts, wt, git_dir, branch, o.base, base_sha, o.known_commit, scratch)
+        try:
+            F.share_worktree(wt_parent, wt, scratch)
+        except OSError as e:
+            raise F.ForgeError(f"cannot share the worktree with {F.AGENT_USER}: {e}")
+        records = F.records_root(root, o.wo)
+        for p in (os.path.dirname(os.path.dirname(records)), os.path.dirname(records), records,
+                  os.path.join(records, "prompts")):
+            F._private_dir(p)
+        d = F.new_ledger(o.wo, facts, wt, git_dir, branch, o.base, base_sha, o.known_commit, scratch, records)
         if root_override:
             d["events"].append({"t": F.now(), "type": "root_override", "uid": 0})
         F.write_new_ledger(ledger, d)
@@ -74,7 +87,7 @@ def main():
             F.bind_session(session, ledger)
         F.emit({"resumed": resumed, "worktree": wt, "branch": branch, "ledger": ledger,
                 "session_bound": bool(session), "counts": d["counts"], "limit": F.LIMIT,
-                "scratch": d["scratch"], "base_sha": d["base_sha"], "candidate": d["candidate"],
+                "scratch": d["scratch"], "records": d["records"], "base_sha": d["base_sha"], "candidate": d["candidate"],
                 "decision": F.decide(d)[0], "root_override": root_override})
 
 

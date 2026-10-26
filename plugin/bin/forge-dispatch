@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""forge-dispatch: run ForgeV2 specialists as the agent account (PL only).
+
+Usage: forge-dispatch ROLE=PROMPT_FILE [ROLE=PROMPT_FILE ...]
+       e.g. forge-dispatch engineer=<records>/prompts/r1-engineer.md
+            forge-dispatch auditor=<records>/prompts/r1-auditor.md tester=... devsecops=...
+
+Each dispatch is counted in the ledger before it starts, all-or-nothing: if any
+requested dispatch is not permitted, none is made. Each specialist then runs as
+a fresh `claude -p` process under the forgev2-agent account through the
+root-owned launcher (sudo, launcher only, agent account only), concurrently
+when several are given. The specialist's final message is printed and kept,
+with its prompt, beside the ledger for the delivery record; a run that returns
+no usable result is recorded as 'void'. A reviewer that leaves the worktree
+different from the candidate it was given is also recorded as 'void'.
+"""
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import threading
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "lib"))
+import forgelib as F  # noqa: E402
+
+TIMEOUT = 1900  # launcher limit (1800s) plus start-up and shut-down
+
+
+def parse_args(argv):
+    jobs = []
+    for a in argv:
+        role, sep, prompt_file = a.partition("=")
+        if not sep or role not in F.ROLES or not prompt_file:
+            raise F.ForgeError(f"expected ROLE=PROMPT_FILE with ROLE one of {', '.join(F.ROLES)}, got {a!r}")
+        if role in [j[0] for j in jobs]:
+            raise F.ForgeError(f"{role} given twice")
+        with open(prompt_file, "rb") as f:
+            prompt = f.read(F.MAX_PROMPT + 1)
+        if len(prompt) > F.MAX_PROMPT or not prompt.strip():
+            raise F.ForgeError(f"{prompt_file}: a prompt must be 1 to {F.MAX_PROMPT} bytes")
+        prompt.decode("utf-8")
+        jobs.append((role, prompt))
+    if not jobs:
+        raise F.ForgeError("nothing to dispatch")
+    if "engineer" in [j[0] for j in jobs] and len(jobs) > 1:
+        raise F.ForgeError("the Engineer is dispatched on its own, never alongside reviewers")
+    return jobs
+
+
+def run_one(cmd, role, worktree, prompt, out):
+    try:
+        r = subprocess.run(cmd + [role, worktree], input=prompt, capture_output=True, timeout=TIMEOUT,
+                           env=F._env())
+        out.update(exit=r.returncode, stdout=r.stdout.decode("utf-8", "replace"),
+                   stderr=r.stderr.decode("utf-8", "replace"))
+    except subprocess.TimeoutExpired:
+        out.update(exit=124, stdout="", stderr=f"forge-dispatch: no result within {TIMEOUT}s")
+    except OSError as e:
+        out.update(exit=127, stdout="", stderr=f"forge-dispatch: cannot start the launcher: {e}")
+
+
+def main():
+    F.require_non_root()
+    jobs = parse_args(sys.argv[1:])
+    path = F.ledger_for_session(os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
+    if not path:
+        raise F.ForgeError("no Work Order is bound to this session; run forge-start first")
+    cmd, test_launcher = F.launcher_cmd()
+    with F.locked_ledger(path) as d:
+        F.check_repo(d["root"], d["repo"], d["known_commit"])
+        slots = []
+        for role, _ in jobs:
+            F.spawn(d, role)
+            ev = d["events"][-1]
+            ev["via"] = "forge-dispatch"
+            if test_launcher:
+                ev["launcher"] = test_launcher
+            slots.append(ev)
+        worktree, candidate = d["worktree"], d["candidate"]
+    results = [dict() for _ in jobs]
+    threads = [threading.Thread(target=run_one, args=(cmd, role, worktree, prompt, out))
+               for (role, prompt), out in zip(jobs, results)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    disp = F.dispatch_dir(path)
+    F._private_dir(disp)
+    failed = False
+    with F.locked_ledger(path) as d:
+        unchanged = None
+        for (role, prompt), slot, out in zip(jobs, slots, results):
+            text, err = "", out["stderr"][-4000:]
+            try:
+                j = json.loads(out["stdout"])
+            except ValueError:
+                j = None
+            j = j if isinstance(j, dict) else {}
+            if not j.get("is_error") and isinstance(j.get("result"), str):
+                text = j["result"]
+            meta = {k: j.get(k) for k in ("num_turns", "duration_ms", "total_cost_usd", "subtype")}
+            problem = None
+            if out["exit"] != 0 or not text.strip():
+                problem = f"launcher exit {out['exit']}, no usable result: {err.strip()[-500:] or 'no output'}"
+            elif role in F.REVIEWERS:
+                if unchanged is None:
+                    unchanged = F.worktree_matches_candidate(d) and d["candidate"] == candidate
+                if not unchanged:
+                    problem = "the worktree no longer matches the candidate after this review"
+            reported = None if problem else F.parse_reported(role, text)
+            name = f"{slot['id']}-{role}.json"
+            record = {"spawn": slot["id"], "role": role, "n": slot["n"], "round": slot["round"],
+                      "candidate": slot["candidate"], "exit": out["exit"], "reported": reported,
+                      "prompt_sha256": hashlib.sha256(prompt).hexdigest(), "prompt": prompt.decode("utf-8"),
+                      "result": text, "stderr_tail": err if problem else "", "meta": meta}
+            F._atomic_write(os.path.join(disp, name), F._dump(record))
+            d["events"].append({"t": F.now(), "type": "dispatched", "spawn": slot["id"], "role": role,
+                                "exit": out["exit"], "reported": reported, "output": f"dispatch/{name}"})
+            print(f"===== {role} (dispatch {slot['id']}, execution {slot['n']}/{F.LIMIT}) =====")
+            if problem:
+                failed = True
+                F.record(d, role, "void", note=problem[:300])
+                print(f"NO RESULT - recorded as void: {problem}")
+            else:
+                print(text.rstrip())
+                print(f"----- reported: {reported or 'no recognisable status line'}; record it with "
+                      f"forge-ledger record {role} ... -----")
+        decision, reason = F.decide(d)
+        print(f"===== next: {decision} ({reason}) =====")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (F.ForgeError, OSError, UnicodeDecodeError) as e:
+        print(f"forge-dispatch: {e}", file=sys.stderr)
+        sys.exit(1)

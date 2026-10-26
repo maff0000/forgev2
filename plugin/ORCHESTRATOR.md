@@ -10,19 +10,24 @@ Orchestrator has **not** been run yet.
 
 ## Identity and subscription
 
-- The PL runs as an ordinary `claude` process using the Claude login that the
-  account running it already has. ForgeV2 uses no API keys, extra subscriptions
-  or separate Claude accounts. Specialists are subagents inside that PL process.
-- Start the PL as a non-root account (on execution hosts, `forgev2-pl`) that
-  holds Git push access for the target repository and nothing more. The PL tools
-  refuse to run as root unless `FORGE_ALLOW_ROOT=1`, which is for development
-  hosts only. Never pass credentials in the Work Order, the prompt or the environment.
-- That account needs: the plugin installed in its own user scope, an approved
-  gitleaks at `/usr/local/bin` or `/usr/bin` (see `INSTALL.md`), its own Claude
-  login, and write access to `$(dirname "$ROOT")/worktrees`, which you create
-  before the first run.
-- In this release specialists share the PL's process and account, so they are
-  **not** isolated from the PL's credentials. See "Security model" in `README.md`.
+- The PL runs as an ordinary `claude` process under the `forgev2-pl` account,
+  using that account's own login to Matt's existing subscription. Specialists run
+  as separate `claude` processes under `forgev2-agent`, using that account's own
+  login to the same subscription. ForgeV2 uses no API keys, extra subscriptions
+  or separate Claude accounts, and never copies a login between accounts.
+- `forgev2-pl` holds Git push access for the target repository and nothing
+  more. The PL tools refuse to run as root unless `FORGE_ALLOW_ROOT=1`, which is
+  for development hosts only. Never pass credentials in the Work Order, the
+  prompt or the environment.
+- The host needs the one-time set-up in `INSTALL.md`: the `forgev2-work` group,
+  the root-owned launcher with its sudo rule, `/usr/local/bin/claude`, an approved
+  gitleaks, and a Claude login for each account. The plugin is installed in
+  `forgev2-pl`'s user scope.
+- The project must be laid out so the agent account can reach the worktrees but
+  nothing else: `ROOT` and its `.git` owned by `forgev2-pl`, and the directory
+  containing `ROOT` owned by `forgev2-pl`, group `forgev2-work`, mode 2750.
+  `forge-start` creates `$(dirname "$ROOT")/worktrees` and shares each worktree
+  with the group.
 
 ## 1. Pass a Work Order
 
@@ -33,18 +38,25 @@ you know it. Use one file per WO, and keep it outside the target repository.
 
 ## 2. Start the PL
 
-Start one fresh PL process per Work Order, and never resume or reuse a session:
+Start one fresh PL process per Work Order as `forgev2-pl`, and never resume or
+reuse a session:
 
 ```sh
-cd "$ROOT" && claude -p \
-  --add-dir "$(dirname "$ROOT")/worktrees" \
-  --allowedTools "Bash Read Write Edit Glob Grep Agent" \
+sudo -u forgev2-pl -H sh -c 'cd && exec env DISABLE_AUTOUPDATER=1 \
+  BASH_DEFAULT_TIMEOUT_MS=2400000 BASH_MAX_TIMEOUT_MS=2400000 \
+  /usr/local/bin/claude -p \
+  --add-dir "$1" --add-dir "$(dirname "$1")/worktrees" \
+  --allowedTools "Bash Read Write Edit Glob Grep" \
   --output-format json \
-  "/forgev2:deliver /path/to/WO-123.md" < /dev/null
+  "/forgev2:deliver $2" < /dev/null' sh "$ROOT" /path/to/WO-123.md
 ```
 
-Add `--plugin-dir /path/to/forgev2/plugin` if the plugin is not installed. The PL
-does not ask questions mid-run. It returns only when it has reached a final status.
+Start it in the PL's home directory, never inside `ROOT` or a worktree: Claude
+loads project settings and CLAUDE.md from its starting directory, and worktree
+contents are written by the agent account. The Bash timeouts let one
+`forge-dispatch` call wait for a specialist (up to 30 minutes each). The Work
+Order file must be readable by `forgev2-pl`. The PL does not ask questions
+mid-run. It returns only when it has reached a final status.
 
 ## 3. Validate the response
 
@@ -55,10 +67,11 @@ Parse it and validate it before acting:
 2. `type == "result"`, `subtype == "success"` and `is_error == false`.
 3. The first line of the `result` string matches exactly
    `# <WO> - (DELIVERED|ESCALATED|BLOCKED)`, and `<WO>` is the Work Order you sent.
-4. If the WO reached the worktree stage, the ledger copy written at close,
-   `<worktrees>/<WO>/.forge/<WO>/ledger.json`, has `"outcome"` equal to that
-   status. (The authoritative ledger is in the PL account's private state
-   directory.) A `BLOCKED` result at the identity gate or at intake has no ledger.
+4. If the WO reached the worktree stage, the ledger copy committed with the
+   delivery record, `<worktrees>/<WO>/.forge/<WO>/ledger.json`, has `"outcome"`
+   equal to that status. (The authoritative ledger is in the PL account's private
+   state directory.) A `BLOCKED` result at the identity gate or at intake has no
+   ledger.
 
 If any check fails, treat the run as **BLOCKED (malformed PL result)**. Keep
 stdout and stderr, and do not retry automatically. `session_id` and

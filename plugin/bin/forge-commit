@@ -5,8 +5,9 @@ Usage: forge-commit -m MESSAGE
 While the Work Order is open: only when the next step is COMMIT, only on top of
 the previous candidate (or the base), stages everything except .forge/, blocks on
 any gitleaks finding and records the new commit as the candidate (invalidating
-earlier reviewer results). After forge-ledger close: commits only the delivery
-record files (.forge/<WO>/ledger.json, REPORT.md, reviews/*.md).
+earlier reviewer results). After forge-ledger close: publishes the delivery
+record (ledger, REPORT.md, prompts, raw dispatch outputs) from the PL's records
+directory into .forge/<WO>/ and commits only those files.
 Runs only the hooks in the PL-owned Git directory, never hooks from the worktree.
 """
 import argparse
@@ -36,12 +37,17 @@ def main():
             if not F.is_ancestor(d, anchor, "HEAD") or not F.record_paths_ok(d, changed):
                 raise F.ForgeError("commits after the reviewed candidate contain more than delivery records")
             status = F.wgit(d, "status", "--porcelain", "--untracked-files=all", "--no-renames").splitlines()
+            if not F.record_paths_ok(d, [line[3:] for line in status]):
+                raise F.ForgeError("Work Order is closed: only the delivery record under .forge/<WO>/ may be "
+                                   "committed; other changes in the worktree are unreviewed")
+            F.publish_records(d, path)
+            status = F.wgit(d, "status", "--porcelain", "--untracked-files=all", "--no-renames").splitlines()
             paths = [line[3:] for line in status]
             if not paths:
                 raise F.ForgeError("nothing to commit")
             if not F.record_paths_ok(d, paths):
-                raise F.ForgeError("Work Order is closed: only .forge/<WO>/ledger.json, REPORT.md and "
-                                   "reviews/*.md may be committed; other changes are unreviewed")
+                raise F.ForgeError("Work Order is closed: only the delivery record under .forge/<WO>/ may be "
+                                   "committed; other changes in the worktree are unreviewed")
             F.wgit(d, "add", "-A", "--", *paths)
         else:
             if F.pending(d):
