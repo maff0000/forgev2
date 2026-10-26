@@ -2,18 +2,17 @@
 """ForgeV2 PreToolUse guard for the Project Lead session.
 
 Specialists do not run inside the PL's Claude process: forge-dispatch starts each
-one as a separate process under the forgev2-agent account, where the operating
-system limits what it can touch. While a Work Order is bound to the session,
-this guard keeps the PL itself on the procedure:
+one as a separate, sandboxed Claude process. While a Work Order is bound to the
+session, this guard keeps the PL itself on the procedure:
 
 1. No in-process subagents (Agent/Task/SendMessage) while the Work Order is
-   open: engineering and review run only through forge-dispatch, where every
-   execution is counted and isolated. No direct sudo/launcher calls either.
+   open, and no direct `claude` runs: engineering and review run only through
+   forge-dispatch, where every execution is counted and sandboxed.
 2. Git writes only through forge-commit / forge-push; never --no-verify or a
    forced push.
 3. The ledger and the raw dispatch outputs change only through forge-* tools.
-4. The worktree and scratch directory belong to the agent account: the PL does
-   not write there, and does not follow a link planted there to a path outside.
+4. The worktree and scratch directory are the specialists': the PL does not
+   write there, and does not follow a link planted there to a path outside.
 
 This is a policy layer on the PL's own tool calls, not an OS boundary. It fails
 closed: any internal error blocks the tool call.
@@ -177,7 +176,7 @@ def _file_rules(tool, ti, d, cwd, private):
         for area in (d["worktree"], d["scratch"]):
             if lexically_under(p, area) or under(p, area):
                 if tool in WRITE_TOOLS:
-                    deny(f"{area} belongs to the agent account: the Engineer changes the worktree "
+                    deny(f"{area} belongs to the specialists: the Engineer changes the worktree "
                          "(dispatch it with forge-dispatch); PL records go in the records directory")
                 if not under(p, area):
                     deny(f"{p} is a link planted in the shared area pointing outside it; not followed")
@@ -186,8 +185,8 @@ def _file_rules(tool, ti, d, cwd, private):
 def _bash_rules(cmd, private):
     if STATE.search(cmd) or any(x in cmd for x in private):
         deny("the ledger is changed only through forge-ledger")
-    if re.search(r"(^|[\s;&|(/])(sudo|agent-run)\b", cmd):
-        deny("specialists are started only by forge-dispatch")
+    if re.search(r"(^|[\s;&|(/])(claude|sudo|bwrap)(\s|$)", cmd):
+        deny("specialists are started only by forge-dispatch, inside the sandbox")
     if "--no-verify" in cmd or re.search(r"\bpush\b.*(--force|\s-f\b|\+refs|\s\+)", cmd):
         deny("hooks are never bypassed and pushes are never forced")
     r = git_violation(cmd)

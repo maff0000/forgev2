@@ -10,24 +10,21 @@ Orchestrator has **not** been run yet.
 
 ## Identity and subscription
 
-- The PL runs as an ordinary `claude` process under the `forgev2-pl` account,
-  using that account's own login to Matt's existing subscription. Specialists run
-  as separate `claude` processes under `forgev2-agent`, using that account's own
-  login to the same subscription. ForgeV2 uses no API keys, extra subscriptions
-  or separate Claude accounts, and never copies a login between accounts.
+- ForgeV2 uses one Claude login: the `forgev2-pl` account's login to Matt's
+  existing subscription. The PL runs under it, and so does every specialist, as
+  a separate sandboxed `claude` process. ForgeV2 uses no API keys, extra
+  subscriptions or separate Claude accounts, and the login is never copied or
+  passed to a specialist. It persists between Work Orders; no login per run.
 - `forgev2-pl` holds Git push access for the target repository and nothing
   more. The PL tools refuse to run as root unless `FORGE_ALLOW_ROOT=1`, which is
   for development hosts only. Never pass credentials in the Work Order, the
   prompt or the environment.
-- The host needs the one-time set-up in `INSTALL.md`: the `forgev2-work` group,
-  the root-owned launcher with its sudo rule, `/usr/local/bin/claude`, an approved
-  gitleaks, and a Claude login for each account. The plugin is installed in
-  `forgev2-pl`'s user scope.
-- The project must be laid out so the agent account can reach the worktrees but
-  nothing else: `ROOT` and its `.git` owned by `forgev2-pl`, and the directory
-  containing `ROOT` owned by `forgev2-pl`, group `forgev2-work`, mode 2750.
-  `forge-start` creates `$(dirname "$ROOT")/worktrees` and shares each worktree
-  with the group.
+- The host needs the one-time set-up in `INSTALL.md`: bubblewrap and socat,
+  `/usr/local/bin/claude`, an approved gitleaks, and the login. The plugin is
+  installed in `forgev2-pl`'s user scope.
+- Keep projects outside the PL's home and state directories (specialists cannot
+  read those). `ROOT` and its `.git` are owned by `forgev2-pl`; `forge-start`
+  creates `$(dirname "$ROOT")/worktrees`.
 
 ## 1. Pass a Work Order
 
@@ -55,7 +52,8 @@ Start it in the PL's home directory, never inside `ROOT` or a worktree: Claude
 loads project settings and CLAUDE.md from its starting directory, and worktree
 contents are written by the agent account. The Bash timeouts let one
 `forge-dispatch` call wait for a specialist (up to 30 minutes each). The Work
-Order file must be readable by `forgev2-pl`. The PL does not ask questions
+Order file must be readable by `forgev2-pl`. The Orchestrator itself may run as
+any account allowed to start a process as `forgev2-pl` (here, root). The PL does not ask questions
 mid-run. It returns only when it has reached a final status.
 
 ## 3. Validate the response

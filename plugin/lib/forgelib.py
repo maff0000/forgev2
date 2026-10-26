@@ -2,15 +2,16 @@
 
 Standard library only. The ledger and delivery records live in the PL's private
 state directory, never in a worktree, and every change to the ledger is made
-under an exclusive lock with an atomic replace. Specialists run as a separate
-Unix account through a root-owned launcher (forge-dispatch); the worktree is
-shared with that account through a group, everything else stays PL-only.
+under an exclusive lock with an atomic replace. Specialists run as separate,
+fresh Claude processes under the PL's own account (one Claude login), inside
+Claude Code's sandbox: bubblewrap for their commands and permission rules for
+their file tools. That is weaker than a separate Unix account; see README.md.
 """
 import fcntl
-import grp
 import hashlib
 import json
 import os
+import pwd
 import re
 import stat
 import subprocess
@@ -30,12 +31,11 @@ SESSION_RE = re.compile(r"^[A-Za-z0-9-]{8,128}$")
 OWNER_NAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$")
 PROTECTED_BRANCHES = ("main", "master")
 
-# Process isolation: specialists run as AGENT_USER via the root-owned launcher
-# (sudo rule: forgev2-pl may run only LAUNCHER_DIR/agent-run, only as AGENT_USER).
-AGENT_USER = "forgev2-agent"
-SHARED_GROUP = "forgev2-work"
-LAUNCHER_DIR = "/usr/local/libexec/forgev2"
+# Specialists: fresh `claude -p` processes in Claude Code's sandbox (bubblewrap + socat).
+CLAUDE = "/usr/local/bin/claude"
+SANDBOX_DEPS = ("/usr/bin/bwrap", "/usr/bin/socat")
 PLUGIN_ROOT = os.path.dirname(LIB)
+SPECIALIST_TOOLS = {"Read", "Grep", "Glob", "Edit", "Write", "Bash"}
 MAX_PROMPT = 256 * 1024
 
 # gitleaks binaries accepted for the commit and push scans (requirement 5).
@@ -232,8 +232,8 @@ def _pl_dir_at(parent_fd, name):
         os.mkdir(name, 0o755, dir_fd=parent_fd)
     except FileExistsError:
         pass
-    replaced = ForgeError(f"{name} in the worktree record path is not a PL-owned, PL-only directory; "
-                          "it was replaced from the agent account - the Work Order must be BLOCKED")
+    replaced = ForgeError(f"{name} in the worktree record path is not a plain PL-owned directory; "
+                          "it was replaced in the worktree - the Work Order must be BLOCKED")
     try:
         fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
     except OSError:
@@ -248,9 +248,9 @@ def _pl_dir_at(parent_fd, name):
 def publish_records(d, ledger):
     """Copy the ledger, REPORT.md, prompts and raw dispatch outputs into <worktree>/.forge/<WO>/.
 
-    The worktree is writable by the agent account, so every path component is opened
-    without following symlinks and must be a PL-owned directory, and every file is
-    created fresh. Returns the published paths relative to the worktree."""
+    The Engineer writes the worktree, so every path component is opened without
+    following symlinks and must be a plain directory, and every file is created
+    fresh. Returns the published paths relative to the worktree."""
     rec = d["records"]
     if not os.path.isfile(os.path.join(rec, "REPORT.md")):
         raise ForgeError(f"write the delivery report to {rec}/REPORT.md first")
@@ -295,54 +295,35 @@ def publish_records(d, ledger):
     return [f".forge/{d['wo']}/{rel}" for rel in files]
 
 
-# --- sharing the worktree with the agent account ---------------------------
+# --- worktree preparation -------------------------------------------------
 
-def shared_gid():
-    try:
-        gid = grp.getgrnam(SHARED_GROUP).gr_gid
-    except KeyError:
-        raise ForgeError(f"group {SHARED_GROUP} does not exist; ForgeV2 needs the host set-up in INSTALL.md")
-    if os.geteuid() != 0 and gid not in os.getgroups():
-        raise ForgeError(f"this account is not a member of {SHARED_GROUP}")
-    return gid
-
-
-def _set(path, gid, add, remove=0):
-    st = os.lstat(path)
-    if stat.S_ISLNK(st.st_mode):
-        return
-    os.chown(path, -1, gid, follow_symlinks=False)
-    os.chmod(path, (stat.S_IMODE(st.st_mode) | add) & ~remove)
-
-
-def share_worktree(wt_parent, wt, scratch):
-    """Group-share the worktree and scratch with the agent account.
-
-    The agent may change files in the worktree and scratch. It may not create
-    worktrees, replace the worktree's .git pointer in place, or write the
-    .forge record directories, which stay PL-only."""
-    gid = shared_gid()
-    for p in (wt_parent, os.path.dirname(scratch)):
-        _set(p, gid, 0o2750, 0o027)
-    _set(scratch, gid, 0o2770, 0o007)
-    for top, dirs, files in os.walk(wt):
-        rel = os.path.relpath(top, wt)
-        if rel == "." and ".forge" in dirs:
-            dirs.remove(".forge")
-            for t2, _, f2 in os.walk(os.path.join(wt, ".forge")):
-                for p in [t2] + [os.path.join(t2, f) for f in f2]:
-                    _set(p, os.lstat(p).st_gid, 0, 0o022)
-        _set(top, gid, 0o2770, 0o007)
-        for f in files:
-            if rel == "." and f == ".git":
-                _set(os.path.join(top, f), os.lstat(os.path.join(top, f)).st_gid, 0, 0o022)
-                continue
-            _set(os.path.join(top, f), gid, 0o060, 0o002)
+def prepare_worktree(wt):
+    """Create <worktree>/.forge as a plain directory, so the sandbox can protect it from the start."""
     fd = os.open(wt, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         os.close(_pl_dir_at(fd, ".forge"))
     finally:
         os.close(fd)
+
+
+def private_paths():
+    """What specialists may never read: the account's home (Claude login, Git credentials,
+    ledger, records), the Claude config directory and the ForgeV2 state directory."""
+    home = pwd.getpwuid(os.geteuid()).pw_dir
+    paths = [home, claude_config_dir(), state_dir()]
+    return sorted({os.path.realpath(p) for p in paths})
+
+
+def claude_config_dir():
+    return os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(pwd.getpwuid(os.geteuid()).pw_dir, ".claude")
+
+
+def require_outside_private(*paths):
+    for p in paths:
+        for q in private_paths():
+            if os.path.commonpath([os.path.realpath(p), q]) == q:
+                raise ForgeError(f"{p} is inside {q}, which specialists cannot read; keep projects and "
+                                 "worktrees outside the PL's home and state directories")
 
 
 # --- ledger ---------------------------------------------------------------
@@ -562,30 +543,84 @@ def _sha256_file(path):
         return hashlib.sha256(f.read()).hexdigest()
 
 
-def verify_install(launcher_dir=LAUNCHER_DIR, plugin_root=PLUGIN_ROOT):
-    """The installed launcher and roles must be root-owned copies of this plugin version's files."""
-    pairs = [(os.path.join(launcher_dir, "agent-run"), os.path.join(plugin_root, "libexec", "agent-run"))]
-    pairs += [(os.path.join(launcher_dir, "roles", f"{r}.md"), os.path.join(plugin_root, "roles", f"{r}.md"))
-              for r in ROLES]
-    for installed, source in pairs:
-        for q in (installed, os.path.dirname(installed)):
-            try:
-                st = os.lstat(q)
-            except FileNotFoundError:
-                raise ForgeError(f"{q} is missing: the ForgeV2 agent launcher is not installed (INSTALL.md)")
-            if stat.S_ISLNK(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o022:
-                raise ForgeError(f"{q} must be root-owned and not group/world-writable")
-        if _sha256_file(installed) != _sha256_file(source):
-            raise ForgeError(f"{installed} differs from this plugin's {source}; reinstall the launcher (INSTALL.md)")
+def load_role(role, roles_dir=None):
+    """Role prompt and tool list from plugin/roles/<role>.md."""
+    path = os.path.join(roles_dir or os.path.join(PLUGIN_ROOT, "roles"), f"{role}.md")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    m = re.match(r"^---\n(.*?)\n---\n(.*)$", text, re.S)
+    tools = re.search(r"^tools:\s*(.+)$", m.group(1), re.M) if m else None
+    if not tools:
+        raise ForgeError(f"{path} has no front matter with a tools: line")
+    names = [t.strip() for t in tools.group(1).split(",")]
+    if not names or not set(names) <= SPECIALIST_TOOLS:
+        raise ForgeError(f"{path} lists tools outside {sorted(SPECIALIST_TOOLS)}")
+    return names, m.group(2).strip()
 
 
-def launcher_cmd():
-    """FORGE_LAUNCHER replaces the sudo launcher in tests; the ledger records that it was used."""
-    test = os.environ.get("FORGE_LAUNCHER")
-    if test:
-        return [test], test
-    verify_install()
-    return ["/usr/bin/sudo", "-n", "-u", AGENT_USER, os.path.join(LAUNCHER_DIR, "agent-run")], None
+def check_runtime():
+    """The sandbox needs bubblewrap and socat; Claude must be the root-owned system binary."""
+    for dep in SANDBOX_DEPS:
+        if not os.access(dep, os.X_OK):
+            raise ForgeError(f"{dep} is missing: specialists run only inside the sandbox (INSTALL.md)")
+    exe = os.environ.get("FORGE_CLAUDE")
+    if exe:
+        return exe
+    for q in (CLAUDE, os.path.dirname(CLAUDE)):
+        st = os.lstat(q)
+        if stat.S_ISLNK(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o022:
+            raise ForgeError(f"{q} must be root-owned and not group/world-writable")
+    return CLAUDE
+
+
+def sandbox_settings(role, tools, worktree, scratch, home, private, git_dirs):
+    """Claude settings for one specialist run. The Engineer may write the worktree (never .git or
+    .forge) and scratch; reviewers only scratch. Commands run in bubblewrap with no network, a
+    private /proc and no fallback to running unsandboxed; file tools follow the same paths.
+    Git directories are denied explicitly: Claude's sandbox otherwise allows writing the Git
+    directory of a repository it starts in (specialists start in scratch, not in the worktree)."""
+    writable = ([worktree] if role == "engineer" else []) + [scratch]
+    allow = [t for t in tools if t in ("Bash", "Read", "Grep", "Glob")]
+    if {"Edit", "Write"} & set(tools):
+        allow += [f"Edit(/{p}/**)" for p in writable]
+    protected = [os.path.join(worktree, ".git"), os.path.join(worktree, ".forge")] + list(git_dirs)
+    deny = [f"Read(/{p}/**)" for p in private] + [f"Edit(/{p})" for p in protected] + \
+        [f"Edit(/{p}/**)" for p in protected]
+    return {
+        "disableAllHooks": True,
+        "permissions": {"allow": allow, "deny": deny},
+        "sandbox": {
+            "enabled": True, "failIfUnavailable": True, "allowUnsandboxedCommands": False,
+            "autoAllowBashIfSandboxed": True, "excludedCommands": [], "enableWeakerNestedSandbox": False,
+            "allowNestedUserNamespaces": False,
+            "filesystem": {"allowWrite": writable + [home], "denyWrite": protected, "denyRead": list(private)},
+            "network": {"allowedDomains": [], "strictAllowlist": True},
+        },
+    }
+
+
+def specialist_command(d, role, home, exe=CLAUDE):
+    """The fixed command line, environment and working directory (scratch) for one specialist
+    run in a fresh HOME. Returns (argv, env, cwd)."""
+    tools, body = load_role(role)
+    wt, scratch = d["worktree"], d["scratch"]
+    private = private_paths()
+    require_outside_private(wt, scratch, home)
+    system = (f"{body}\n\nForgeV2 assignment: role {role}; worktree {wt}; scratch directory {scratch} "
+              "(your starting directory; use `git -C <worktree>` and absolute paths for the worktree). "
+              "You run in a sandbox: Git metadata, the delivery record, the PL's files and the network "
+              "are not available to you" + ("" if role == "engineer" else ", and the worktree is read-only") + ".")
+    settings = sandbox_settings(role, tools, wt, scratch, home, private, (d["git_dir"], d["common_dir"]))
+    argv = [exe, "-p", "--output-format", "json", "--no-session-persistence", "--safe-mode",
+            "--setting-sources", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+            "--disable-slash-commands", "--tools", ",".join(tools), "--permission-mode", "dontAsk",
+            "--settings", json.dumps(settings), "--append-system-prompt", system]
+    user = pwd.getpwuid(os.geteuid()).pw_name
+    env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": home, "TMPDIR": os.path.join(home, "tmp"),
+           "USER": user, "LOGNAME": user, "SHELL": "/bin/bash", "LANG": "C.UTF-8",
+           "CLAUDE_CONFIG_DIR": claude_config_dir(), "DISABLE_AUTOUPDATER": "1",
+           "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1", "FORGE_ROLE": role}
+    return argv, env, scratch
 
 
 # --- gitleaks ---------------------------------------------------------------

@@ -21,28 +21,33 @@ external_runtime_or_development_tools_observed:
   - name: Claude Code
     version_reported: 2.1.310
     role: >-
-      agent runtime for the PL (forgev2-pl) and for every specialist run (forgev2-agent,
-      started by the ForgeV2 launcher)
+      agent runtime for the PL and for every specialist run (both under forgev2-pl, one login);
+      its sandbox confines the specialists' commands and file tools
     repository_incorporation: false
     provenance: >-
       Anthropic native installer for root on the development host
       (~/.local/share/claude/versions/2.1.310). Stage B copied that same file, unchanged,
-      to /usr/local/bin/claude (root:root 0755) so both service accounts run one
+      to /usr/local/bin/claude (root:root 0755) so the non-root PL account runs a
       root-owned binary; SHA-256 b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56
       before and after the copy. No new download.
     use_control: >-
-      The launcher refuses to start a specialist unless /usr/local/bin/claude and its
+      forge-dispatch refuses to start a specialist unless /usr/local/bin/claude and its
       directory are root-owned and not group/world-writable; runs set DISABLE_AUTOUPDATER=1.
     licence_and_supply_chain_assessment: pending
     approval: not_established_by_this_record
-  - name: sudo
-    version_reported: 1.9.13p3-1+deb12u4
-    role: >-
-      identity switch from forgev2-pl to forgev2-agent, limited by /etc/sudoers.d/forgev2
-      to the root-owned launcher
+  - name: bubblewrap
+    version_reported: 0.8.0-2+deb12u1
+    role: namespace sandbox that Claude Code uses to run specialist commands (not setuid)
+    repository_incorporation: false
+    provenance: Debian bookworm package, installed 2026-10-26 with apt (log /var/log/forgev2-stage-b-001/sandbox-changes.log).
+    licence_and_supply_chain_assessment: Debian-maintained system package (LGPL-2.0+); not separately assessed.
+    approval: not_established_by_this_record
+  - name: socat
+    version_reported: 1.7.4.4-2
+    role: relay Claude Code's sandbox uses for its network proxy
     repository_incorporation: false
     provenance: Debian bookworm package, already installed on the host.
-    licence_and_supply_chain_assessment: Debian-maintained system package; not separately assessed.
+    licence_and_supply_chain_assessment: Debian-maintained system package (GPL-2); not separately assessed.
     approval: not_established_by_this_record
   - name: Git
     version_reported: 2.39.5

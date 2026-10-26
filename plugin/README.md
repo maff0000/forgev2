@@ -2,27 +2,26 @@
 
 A Claude Code plugin that turns one approved task into an independently reviewed
 Git branch. The session that runs `/forgev2:deliver` is the **Project Lead (PL)**.
-It runs as the `forgev2-pl` account and owns all Git operations. Each of the four
-specialists runs as a separate `claude -p` process under the `forgev2-agent`
-account, started through a small root-owned launcher.
+It runs as the non-root `forgev2-pl` account, the one Claude login ForgeV2 uses,
+and owns all Git operations. Each of the four specialists runs as a fresh, separate
+`claude -p` process under that same account, inside Claude Code's sandbox.
 
 | Component | Purpose |
 | --- | --- |
 | `skills/deliver` | PL procedure: intake, identity gate, delivery loop, report |
 | `roles/engineer.md` | Implements and tests the change in the WO worktree; no Git writes |
 | `roles/auditor.md`, `tester.md`, `devsecops.md` | Fresh, independent reviews of a committed candidate |
-| `bin/forge-start` | Repository identity gate, `forge/<WO>` worktree shared with the agent account, ledger |
-| `bin/forge-dispatch` | Counts a dispatch, runs the specialist as `forgev2-agent`, keeps its output |
+| `bin/forge-start` | Repository identity gate, `forge/<WO>` worktree and scratch directory, ledger |
+| `bin/forge-dispatch` | Counts a dispatch, runs the specialist in a sandboxed Claude process, keeps its output |
 | `bin/forge-ledger` | Records results, computes the next step, closes the WO |
 | `bin/forge-commit` | gitleaks-gated PL commit that sets the review candidate; publishes the record |
 | `bin/forge-push` | Re-verifies identity and pushes the WO branch (never forced) |
-| `libexec/agent-run` | The launcher, installed root-owned by the operator with its one-line sudo rule |
 | `hooks/guard.py` | Keeps the PL session on the procedure (no subagents, Git only via forge tools) |
 
 ## Install
 
-The execution host needs a one-time set-up by root (the `forgev2-work` group,
-the launcher and its sudo rule, and a Claude login for each account); see the
+The execution host needs a one-time set-up by root (bubblewrap and socat, the
+system `claude` binary, and one Claude login for `forgev2-pl`); see the
 repository `INSTALL.md`. Then, as `forgev2-pl`:
 
 ```sh
@@ -74,27 +73,44 @@ result and handles `DELIVERED` / `ESCALATED` / `BLOCKED` is described in
 
 ## Security model
 
-**Two accounts, enforced by the operating system.** The PL runs as `forgev2-pl`;
-specialists run as `forgev2-agent`. The only link between them is the sudo rule
-`forgev2-pl ALL=(forgev2-agent) NOPASSWD: /usr/local/libexec/forgev2/agent-run`:
-the PL can run the launcher, only as the agent account, and nothing else. The
-launcher accepts a role, a worktree created by `forge-start` and a prompt on
-stdin. It builds the `claude` command line and environment itself, and starts
-Claude in safe mode with no settings, hooks, MCP servers, skills or CLAUDE.md
-files, in a fresh empty HOME for every run.
+**One account, one login, specialists sandboxed.** The PL and every specialist run
+as `forgev2-pl`, using its single Claude login; no login is copied and no
+credential is passed to a specialist. Each specialist is a fresh `claude -p`
+process with a fresh, empty HOME, started by `forge-dispatch` with fixed settings:
 
-| The agent account (all specialists) | can | cannot |
+- Safe mode: no settings files, hooks, MCP servers, skills or CLAUDE.md are loaded.
+- Commands run in Claude Code's sandbox (bubblewrap, seccomp and a network proxy).
+  If the sandbox cannot start, the run stops; nothing runs unsandboxed.
+- File tools (Read/Grep/Glob/Edit/Write) are limited by permission rules on the
+  same paths, enforced by Claude Code. The specialist starts in the scratch
+  directory, not in the repository.
+
+| Specialist access (commands and file tools) | Engineer | Auditor, Tester, DevSecOps |
 | --- | --- | --- |
-| WO worktree files, scratch directory | read, write | |
-| Worktree Git metadata, refs, objects, hooks, config | read | write (so it cannot commit, branch or push) |
-| `.forge/` delivery record in the worktree | read | write |
-| Canonical checkout (`ROOT`) | read | write |
-| PL home: Claude login, Git credentials, ledger, records | | read or list |
-| PL process environments | | read |
-| sudo | | run anything |
+| Worktree | read, write (not `.git` or `.forge`) | read only |
+| Scratch directory | read, write | read, write |
+| Worktree and common Git directories (refs, objects, hooks, config) | read only | read only |
+| PL home: Claude login, Git credentials, ledger, records, Claude config | no access | no access |
+| Other processes (including the PL's environment and memory) | not visible (own `/proc`) | not visible |
+| Network from commands; Unix sockets; new user namespaces | blocked | blocked |
+| `/tmp`, `/var/tmp`, canonical checkout, rest of the system | read only | read only |
 
-`tests/host/os-boundary.sh` checks each row on the real accounts, together with
-the sudo rule and the launcher's refusals.
+`tests/host/sandbox-boundary.sh` checks each row with real specialist runs, for the
+Engineer, Auditor and Tester: commands through a probe script that records only
+reachable/blocked, file tools through attempted reads and writes whose effects
+are checked on disk. It also checks that a run stops when bubblewrap is unavailable.
+
+**Weaker than separate Unix accounts.** Everything above is enforced by Claude
+Code (its sandbox runtime and its permission checks) and by bubblewrap and the
+kernel's namespaces, all inside the account that holds the PL's Claude login and
+Git credentials. The specialist's own Claude process runs unsandboxed in that
+account and holds the login token in memory; only the tools the model uses are
+confined. A defect in Claude Code's sandbox or permission checks, in bubblewrap,
+or a kernel namespace escape would expose the PL's credentials to a specialist.
+Separate Unix accounts would not depend on Claude Code for that boundary, but
+need a second login. Sandboxed commands also see two values the sandbox itself
+sets: its proxy password (the proxy allows no hosts) and its session-inbox token
+(unusable: Unix sockets are blocked). Both are tested.
 
 **Enforced by the PL tools** (`forge-*`, running as the PL):
 
@@ -113,43 +129,41 @@ the sudo rule and the launcher's refusals.
   Repository allowlists, `.gitleaksignore` and `gitleaks:allow` are not honoured.
 - **Worktree contents are untrusted:** the PL never runs code or Git hooks from
   the worktree, never trusts its `.git` pointer, and writes the delivery record
-  into it without following links the agent account could plant there.
+  into it without following links planted there.
+- **Projects outside the PL home:** a project or worktree inside the PL's home
+  or state directory is refused (specialists could not read it anyway).
 - **Not as root:** the tools refuse to run as root unless `FORGE_ALLOW_ROOT=1`
   (development hosts only; recorded in the ledger).
 
 **Guard hook (policy on the PL's own tool calls):** while a Work Order is open
-the PL cannot start in-process subagents or call sudo/the launcher directly, makes
+the PL cannot start in-process subagents or run `claude`/`bwrap` directly, makes
 Git writes only through `forge-commit`/`forge-push`, cannot edit the ledger, and
 does not write into the shared worktree or follow links planted in it. Its shell
 checks are pattern-based; it is not a security boundary.
 
 **Not enforced:**
 
-- All four specialists share the one agent account. The operating system does
-  not stop a reviewer from editing the worktree, or the Engineer from reading
-  scratch files. A change in the worktree is caught instead: review requires a
-  clean worktree equal to the candidate, a review that leaves it changed is void,
-  and delivery requires the worktree to be exactly the reviewed commit.
-- The agent account has network access and its own Claude login. A misbehaving
-  specialist could send out what it can read: the worktree, the project
-  checkout, and anything world-readable on the host.
-- The PL is a Claude session reading text written by the agent account (diffs,
-  specialist reports). Its tools bound what it can do, but prompt injection into
-  the PL is not prevented.
+- The specialist's Claude process itself reaches Anthropic's API; only its
+  commands are offline. It can read the worktree, the project checkout and
+  anything world-readable on the host, and it reports text back to the PL.
+- All specialists share the scratch directory.
+- The PL is a Claude session reading text written by specialists (diffs,
+  reports). Its tools bound what it can do, but prompt injection into the PL is
+  not prevented.
 - No browser on this host: web changes come back `ESCALATED` (Tester
   `INCONCLUSIVE`), never claimed as browser-verified.
 
 | Property | Status |
 | --- | --- |
 | PL-tool gates (identity, ledger, dispatch, commit, push, secrets) | Tested: `tests/test_forgev2.py` |
-| Separation of `forgev2-pl` and `forgev2-agent`, sudo rule, launcher | Tested on the host: `tests/host/os-boundary.sh` |
-| Delivery with specialists as `forgev2-agent` | Live runs: `docs/evidence/FORGEV2-PLUGIN-BUILD-001.md` |
+| Specialist sandbox (commands, file tools, fail-closed start) | Tested on the host: `tests/host/sandbox-boundary.sh` |
+| Delivery with sandboxed specialists under `forgev2-pl` | Live runs: `docs/evidence/FORGEV2-PLUGIN-BUILD-001.md` |
 | Access by external engineers | **Not assessed** |
 
 ## Tests
 
 ```sh
-python3 -m unittest discover -s tests -v   # identity, loop limits, dispatch, launcher, guard, commit/push
+python3 -m unittest discover -s tests -v   # identity, loop limits, dispatch, sandbox settings, guard, commit/push
 claude plugin validate plugin              # manifest and components
-sudo tests/host/os-boundary.sh plugin      # execution host: accounts, sudo rule, launcher
+sudo tests/host/sandbox-boundary.sh plugin # execution host: real sandboxed specialists (needs the PL login)
 ```

@@ -5,8 +5,8 @@ Usage: forge-start --wo ID --repo OWNER/NAME --root PROJECT_ROOT [--base BRANCH]
                    [--known-commit SHA] [--worktrees DIR]
 Re-running for an existing Work Order resumes it; execution counts are never reset.
 The ledger and the delivery records are kept in the PL's private state directory,
-outside the worktree. The worktree and a scratch directory are shared with the
-agent account through the forgev2-work group; Git metadata and .forge/ are not.
+outside the worktree. Projects and worktrees must be outside the PL's home and
+state directories, which specialists cannot read.
 """
 import argparse
 import os, sys
@@ -47,7 +47,7 @@ def main():
             raise F.ForgeError(f"base already contains records for {o.wo}; use a new Work Order id")
         if F.git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", cwd=root, check=False):
             raise F.ForgeError(f"branch {branch} already exists without a ledger; resolve manually")
-        F.shared_gid()
+        F.require_outside_private(root, wt_parent)
         scratch = os.path.join(wt_parent, ".forge-scratch", o.wo)
         try:
             os.makedirs(wt_parent, exist_ok=True)
@@ -62,10 +62,7 @@ def main():
         git_dir = os.path.realpath(F.git("rev-parse", "--absolute-git-dir", cwd=wt))
         if os.path.dirname(git_dir) != os.path.join(facts["common_dir"], "worktrees"):
             raise F.ForgeError(f"unexpected worktree Git directory {git_dir}")
-        try:
-            F.share_worktree(wt_parent, wt, scratch)
-        except OSError as e:
-            raise F.ForgeError(f"cannot share the worktree with {F.AGENT_USER}: {e}")
+        F.prepare_worktree(wt)
         records = F.records_root(root, o.wo)
         for p in (os.path.dirname(os.path.dirname(records)), os.path.dirname(records), records,
                   os.path.join(records, "prompts")):
