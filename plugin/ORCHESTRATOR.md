@@ -21,7 +21,10 @@ Orchestrator has **not** been run yet.
   prompt or the environment.
 - The host needs the one-time set-up in `INSTALL.md`: bubblewrap and socat,
   `/usr/local/bin/claude`, an approved gitleaks, and the login. The plugin is
-  installed in `forgev2-pl`'s user scope.
+  loaded per run with `--plugin-dir` from the root-owned checkout
+  (`/srv/forgev2/src/plugin`), not installed in `forgev2-pl`'s user scope: the
+  user-scope copy lives in a directory the PL account can write, so the engine's
+  gates would be editable by a prompt-injected PL.
 - Keep projects outside the PL's home and state directories (specialists cannot
   read those). `ROOT` and its `.git` are owned by `forgev2-pl`; `forge-start`
   creates `$(dirname "$ROOT")/worktrees`.
@@ -42,6 +45,7 @@ reuse a session:
 sudo -u forgev2-pl -H sh -c 'cd && exec env DISABLE_AUTOUPDATER=1 \
   BASH_DEFAULT_TIMEOUT_MS=2400000 BASH_MAX_TIMEOUT_MS=2400000 \
   /usr/local/bin/claude -p \
+  --plugin-dir /srv/forgev2/src/plugin \
   --add-dir "$1" --add-dir "$(dirname "$1")/worktrees" \
   --allowedTools "Bash Read Write Edit Glob Grep" \
   --output-format json \

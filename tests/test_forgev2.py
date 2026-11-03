@@ -1009,6 +1009,16 @@ class DeliveryEndToEnd(Base):
         self.assertEqual(r.returncode, 1)
         self.assertIn("unreviewed", r.stderr)
 
+    def test_push_refuses_rename_that_hides_a_deletion(self):
+        """Release audit: rename detection must not hide a deleted reviewed file."""
+        self.deliver()
+        self.commit_records()
+        self.sh("mkdir -p .forge/WO-1/prompts && git mv calc.py .forge/WO-1/prompts/moved.md", cwd=self.wt)
+        self.sh("git commit -qm hide", cwd=self.wt)
+        r = self.run_bin("forge-push")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("unreviewed", r.stderr)
+
     def test_close_delivered_refuses_head_beyond_candidate(self):
         self.started()
         self.build()

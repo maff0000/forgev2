@@ -36,7 +36,7 @@ def main():
             raise F.ForgeError("DELIVERED without a candidate")
         anchor = d["candidate"] or d["base_sha"]
         head = F.wgit(d, "rev-parse", "HEAD")
-        changed = F.wgit(d, "diff", "--name-only", f"{anchor}..{head}").splitlines()
+        changed = F.wgit(d, "diff", "--no-renames", "--name-only", f"{anchor}..{head}").splitlines()
         if not F.is_ancestor(d, anchor, head) or not F.record_paths_ok(d, changed):
             raise F.ForgeError("the branch contains changes after the reviewed candidate other than "
                                "delivery records; refusing to push unreviewed code")

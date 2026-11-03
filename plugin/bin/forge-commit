@@ -33,7 +33,7 @@ def main():
         head = F.wgit(d, "rev-parse", "HEAD")
         anchor = d["candidate"] or d["base_sha"]
         if d["outcome"]:
-            changed = F.wgit(d, "diff", "--name-only", f"{anchor}..HEAD").splitlines()
+            changed = F.wgit(d, "diff", "--no-renames", "--name-only", f"{anchor}..HEAD").splitlines()
             if not F.is_ancestor(d, anchor, "HEAD") or not F.record_paths_ok(d, changed):
                 raise F.ForgeError("commits after the reviewed candidate contain more than delivery records")
             status = F.wgit(d, "status", "--porcelain", "--untracked-files=all", "--no-renames").splitlines()

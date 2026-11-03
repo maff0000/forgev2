@@ -9,7 +9,7 @@ ForgeV2 is **AI-first**. This is a task list for Claude, **not** a self-installe
 ```sh
 claude plugin validate <checkout>/plugin            # must pass
 claude plugin marketplace add <checkout>            # or: maff0000/forgev2 (GitHub)
-claude plugin install forgev2@forgev2               # or load per run with --plugin-dir <checkout>/plugin
+claude plugin install forgev2@forgev2               # preferred on an execution host: load per run with --plugin-dir <root-owned checkout>/plugin (a user-scope install is PL-writable)
 claude plugin details forgev2                       # expect skill deliver and the PreToolUse hook
 python3 -m unittest discover -s <checkout>/tests    # plugin self-tests
 sudo <checkout>/tests/host/os-boundary.sh <checkout>/plugin   # execution host only
