@@ -20,13 +20,13 @@ and owns all Git operations. Each of the four specialists runs as a fresh, separ
 
 ## Install
 
-The execution host needs a one-time set-up by root (bubblewrap and socat, the
-system `claude` binary, and one Claude login for `forgev2-pl`); see the
-repository `INSTALL.md`. Then, as `forgev2-pl`:
-
-```sh
-claude plugin marketplace add maff0000/forgev2 && claude plugin install forgev2@forgev2
-```
+The execution host needs one-time setup (bubblewrap and socat, system `claude`,
+and one Claude login for `forgev2-pl`); see `INSTALL.md`. Launch each PL with
+`--plugin-dir` pointing to the **root-owned, non-writable** ForgeV2 installation;
+do not install a second, PL-writable user-scope copy. For the planned Trinity
+deployment, the protected installation is `trinity:/srv/forgev2`; installation
+there is a separate, post-sign-off operation. Foundry, if locally installed at
+`trinity:/srv/foundry`, is likewise read-only during application deliveries.
 
 ## The loop
 
@@ -53,7 +53,9 @@ specialist's final message as captured by `forge-dispatch`.
 ```
 WO: WO-123
 REPO: owner/name            # exact GitHub identity; look-alikes are rejected
+HOST: dev-hostname          # the verified development/execution machine, not assumed Trinity
 ROOT: /abs/path/to/checkout # canonical checkout; the PL never edits it directly
+WORKTREES: /abs/path/to/worktrees # explicit sibling of ROOT; no default
 BASE: main                  # optional
 KNOWN_COMMIT: <sha>         # optional, recommended: proves the right history
 PUSH: no                    # optional
@@ -70,6 +72,14 @@ BROWSER: yes                # optional: browser behaviour is material
 How an Orchestrator starts the PL, passes a Work Order, validates the JSON
 result and handles `DELIVERED` / `ESCALATED` / `BLOCKED` is described in
 [`ORCHESTRATOR.md`](ORCHESTRATOR.md).
+
+**Host/path gate:** `forge-start` checks the current machine against `HOST`
+before changing Git; ROOT and WORKTREES must be explicit canonical absolute
+siblings in the project's declared directory. No delivery worktree can overlap
+`/srv/forgev2`, `/srv/foundry`, or the running plugin source. These tools are
+local-filesystem tools: an Orchestrator on Trinity cannot use them to develop
+on a remote host merely by naming its IP. The approved execution/transport path
+to a remote host must exist and be tested first; otherwise return BLOCKED.
 
 ## Security model
 

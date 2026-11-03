@@ -26,14 +26,18 @@ Orchestrator has **not** been run yet.
   user-scope copy lives in a directory the PL account can write, so the engine's
   gates would be editable by a prompt-injected PL.
 - Keep projects outside the PL's home and state directories (specialists cannot
-  read those). `ROOT` and its `.git` are owned by `forgev2-pl`; `forge-start`
-  creates `$(dirname "$ROOT")/worktrees`.
+  read those). `ROOT` and its `.git` are owned by `forgev2-pl`. A project has
+  an explicitly declared `HOST`, `ROOT` and `WORKTREES`; no directory is guessed.
+- The eventual Trinity engine installation is `trinity:/srv/forgev2`, protected
+  and read-only during application WOs. The optional Foundry reference at
+  `trinity:/srv/foundry` is equally protected. Neither is an application workspace.
 
 ## 1. Pass a Work Order
 
 Write one Work Order file in the format in `README.md` ("Work Order format").
-The required fields are `WO`, `REPO` (exact `owner/name`) and `ROOT` (the canonical
-checkout), plus the change and the acceptance criteria. Give `KNOWN_COMMIT` when
+The required fields are `WO`, `REPO` (exact `owner/name`), `HOST` (verified
+development host hostname), `ROOT` (canonical checkout) and `WORKTREES`
+(canonical sibling worktree parent), plus the change and acceptance criteria. Give `KNOWN_COMMIT` when
 you know it. Use one file per WO, and keep it outside the target repository.
 
 ## 2. Start the PL
@@ -45,12 +49,21 @@ reuse a session:
 sudo -u forgev2-pl -H sh -c 'cd && exec env DISABLE_AUTOUPDATER=1 \
   BASH_DEFAULT_TIMEOUT_MS=2400000 BASH_MAX_TIMEOUT_MS=2400000 \
   /usr/local/bin/claude -p \
-  --plugin-dir /srv/forgev2/src/plugin \
-  --add-dir "$1" --add-dir "$(dirname "$1")/worktrees" \
+  --plugin-dir /srv/forgev2/plugin \
+  --add-dir "$1" --add-dir "$2" \
   --allowedTools "Bash Read Write Edit Glob Grep" \
   --output-format json \
-  "/forgev2:deliver $2" < /dev/null' sh "$ROOT" /path/to/WO-123.md
+  "/forgev2:deliver $3" < /dev/null' sh "$ROOT" "$WORKTREES" /path/to/WO-123.md
 ```
+
+The `--plugin-dir` above is the **planned** Trinity layout; use the exact
+root-owned plugin directory verified at deployment (the previously tested VPS
+copy used `/srv/forgev2/src/plugin`). This example is not proof Trinity is
+installed or that a remote execution route exists. ForgeV2's current tools
+run locally. If `HOST` is another machine (e.g. the CRM development host),
+first arrange and test a bounded way to start the PL on that approved host
+with the same immutable engine version; without it the WO is BLOCKED. Do not
+run the WO against Trinity's paths or create an arbitrary local checkout.
 
 Start it in the PL's home directory, never inside `ROOT` or a worktree: Claude
 loads project settings and CLAUDE.md from its starting directory, and worktree

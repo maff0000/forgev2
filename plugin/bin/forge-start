@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """forge-start: verify repository identity, create the WO branch/worktree, open the ledger.
 
-Usage: forge-start --wo ID --repo OWNER/NAME --root PROJECT_ROOT [--base BRANCH]
-                   [--known-commit SHA] [--worktrees DIR]
+Usage: forge-start --wo ID --repo OWNER/NAME --host VERIFIED_HOST --root CHECKOUT
+                   --worktrees WORKTREE_DIR [--base BRANCH] [--known-commit SHA]
 Re-running for an existing Work Order resumes it; execution counts are never reset.
 The ledger and the delivery records are kept in the PL's private state directory,
 outside the worktree. Projects and worktrees must be outside the PL's home and
@@ -18,27 +18,28 @@ def main():
     a = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     a.add_argument("--wo", required=True)
     a.add_argument("--repo", required=True)
+    a.add_argument("--host", required=True)
     a.add_argument("--root", required=True)
     a.add_argument("--base", default="main")
     a.add_argument("--known-commit")
-    a.add_argument("--worktrees")
+    a.add_argument("--worktrees", required=True)
     o = a.parse_args()
     root_override = F.require_non_root()
     if not F.WO_RE.match(o.wo):
         raise F.ForgeError(f"invalid Work Order id {o.wo!r}")
-    facts = F.check_repo(o.root, o.repo, o.known_commit)
+    target_root, wt_parent = F.validate_project_target(o.host, o.root, o.worktrees)
+    facts = F.check_repo(target_root, o.repo, o.known_commit)
     root = facts["root"]
     for ident in ("GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT"):
         if F.git_run("var", ident, cwd=root).returncode:
             raise F.ForgeError("this account has no Git author identity; set user.name and user.email "
                                "for it before starting a Work Order (INSTALL.md)")
     branch = f"forge/{o.wo}"
-    wt_parent = os.path.realpath(o.worktrees or os.path.join(os.path.dirname(root), "worktrees"))
     wt = os.path.join(wt_parent, o.wo)
     ledger = F.ledger_path(root, o.wo)
     if os.path.exists(ledger):
         with F.locked_ledger(ledger, write=False) as d:
-            if (d["repo"], d["root"], d["worktree"], d["wo"]) != (facts["repo"], root, wt, o.wo):
+            if (d["repo"], d["root"], d["worktree"], d["wo"], d.get("host")) != (facts["repo"], root, wt, o.wo, o.host.lower()):
                 raise F.ForgeError("existing ledger belongs to a different repository or worktree")
             if not os.path.isdir(wt):
                 raise F.ForgeError(f"ledger exists but worktree {wt} is missing; use a new Work Order id")
@@ -72,6 +73,7 @@ def main():
                   os.path.join(records, "prompts")):
             F._private_dir(p)
         d = F.new_ledger(o.wo, facts, wt, git_dir, branch, o.base, base_sha, o.known_commit, scratch, records)
+        d["host"] = o.host.lower()
         if root_override:
             d["events"].append({"t": F.now(), "type": "root_override", "uid": 0})
         F.write_new_ledger(ledger, d)
@@ -86,7 +88,7 @@ def main():
         session = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
         if session:
             F.bind_session(session, ledger)
-        F.emit({"resumed": resumed, "worktree": wt, "branch": branch, "ledger": ledger,
+        F.emit({"resumed": resumed, "host": o.host.lower(), "worktree": wt, "branch": branch, "ledger": ledger,
                 "session_bound": bool(session), "counts": d["counts"], "limit": F.LIMIT,
                 "scratch": d["scratch"], "records": d["records"], "base_sha": d["base_sha"], "candidate": d["candidate"],
                 "decision": F.decide(d)[0], "root_override": root_override})

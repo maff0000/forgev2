@@ -8,9 +8,7 @@ ForgeV2 is **AI-first**. This is a task list for Claude, **not** a self-installe
 
 ```sh
 claude plugin validate <checkout>/plugin            # must pass
-claude plugin marketplace add <checkout>            # or: maff0000/forgev2 (GitHub)
-claude plugin install forgev2@forgev2               # preferred on an execution host: load per run with --plugin-dir <root-owned checkout>/plugin (a user-scope install is PL-writable)
-claude plugin details forgev2                       # expect skill deliver and the PreToolUse hook
+# Launch PL with --plugin-dir <root-owned checkout>/plugin (never a user-scope, PL-writable copy)
 python3 -m unittest discover -s <checkout>/tests    # plugin self-tests
 sudo <checkout>/tests/host/os-boundary.sh <checkout>/plugin   # execution host only
 ```
@@ -42,6 +40,16 @@ Verify with `sudo <checkout>/tests/host/sandbox-boundary.sh <checkout>/plugin`.
 ## Matt's one-line request
 
 > Claude, review `https://github.com/maff0000/forgev2`, follow its `INSTALL.md`, install the approved ForgeV2 version on the named target, connect it to my existing Orchestrator, test it, and report PASS or the specific blocker. Reuse my working Claude subscription; do not create another login, subscription, or API key.
+
+**Target separation:** Trinity's planned `/srv/forgev2` is the immutable
+engine installation; `/srv/foundry` is an optional immutable framework
+reference. Do not create or change either on Trinity before sign-off. Every
+application WO must supply `HOST`, `ROOT` and `WORKTREES`, verified as the
+development machine and its distinct canonical checkout/worktree directory.
+The current plugin uses local Git/filesystem tools and rejects a remote `HOST`;
+the remote execution mechanism must be explicitly installed and tested before
+the Orchestrator can deliver to a different host. Do not substitute a local
+checkout or use a temp directory to get past this gate.
 
 ## Claude's to-do list
 

@@ -13,6 +13,7 @@ import json
 import os
 import pwd
 import re
+import socket
 import stat
 import subprocess
 import sys
@@ -30,6 +31,9 @@ SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$")
 SESSION_RE = re.compile(r"^[A-Za-z0-9-]{8,128}$")
 OWNER_NAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$")
 PROTECTED_BRANCHES = ("main", "master")
+# These are reserved framework installations, never application workspaces.
+# Also protect the actual source from which this copy of the plugin is running.
+PROTECTED_INSTALLS = ("/srv/forgev2", "/srv/foundry", os.path.dirname(os.path.dirname(LIB)))
 
 # Specialists: fresh `claude -p` processes in Claude Code's sandbox (bubblewrap + socat).
 CLAUDE = "/usr/local/bin/claude"
@@ -324,6 +328,52 @@ def require_outside_private(*paths):
             if os.path.commonpath([os.path.realpath(p), q]) == q:
                 raise ForgeError(f"{p} is inside {q}, which specialists cannot read; keep projects and "
                                  "worktrees outside the PL's home and state directories")
+
+
+def validate_project_target(host, root, worktrees):
+    """Fail closed on undeclared, remote or overlapping delivery locations.
+
+    ForgeV2's Git/worktree tools currently operate on the LOCAL filesystem.
+    A controller on Trinity must not silently use its own checkout when the
+    approved development host is elsewhere. Remote execution must be explicitly
+    provisioned and verified before the PL is started on that host.
+    """
+    if not host or not host.strip() or any(c.isspace() for c in host):
+        raise ForgeError("HOST is mandatory: specify the verified development host")
+    local = {socket.gethostname().lower(), socket.getfqdn().lower()}
+    # IPs are also valid verified HOST values. Compare against addresses
+    # actually assigned to a local interface, never DNS resolution alone.
+    try:
+        r = subprocess.run(["/usr/sbin/ip", "-o", "addr", "show"],
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            for line in r.stdout.splitlines():
+                parts = line.split()
+                for i, item in enumerate(parts[:-1]):
+                    if item in ("inet", "inet6"):
+                        local.add(parts[i + 1].split("/")[0].lower())
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass  # If interfaces cannot be enumerated, numeric targets fail closed.
+    if host.lower() not in local:
+        raise ForgeError(f"development host {host!r} is not this execution host "
+                         f"({socket.gethostname()}); remote execution is not configured; BLOCKED")
+    if not root or not worktrees:
+        raise ForgeError("ROOT and WORKTREES are both mandatory; no implicit worktree location")
+    for label, path in (("ROOT", root), ("WORKTREES", worktrees)):
+        if not os.path.isabs(path) or os.path.normpath(path) != path or os.path.realpath(path) != path:
+            raise ForgeError(f"{label} must be an absolute, canonical path without symlink aliases: {path!r}")
+    # The canonical checkout and the worktree area must be separate siblings
+    # below the one explicitly designated project directory.
+    if os.path.dirname(root) != os.path.dirname(worktrees) or root == worktrees:
+        raise ForgeError("ROOT and WORKTREES must be distinct siblings in one declared project directory")
+    project_dir = os.path.dirname(root)
+    for protected in PROTECTED_INSTALLS:
+        protected = os.path.realpath(protected)
+        if any(os.path.commonpath((path, protected)) in (path, protected)
+               for path in (project_dir, root, worktrees)):
+            raise ForgeError(f"project paths overlap protected Foundry/ForgeV2 installation {protected}")
+    require_outside_private(project_dir, root, worktrees)
+    return root, worktrees
 
 
 # --- ledger ---------------------------------------------------------------

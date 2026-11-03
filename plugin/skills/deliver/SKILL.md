@@ -1,7 +1,7 @@
 ---
 name: deliver
 description: Run a ForgeV2 delivery as Project Lead - take one approved task or Work Order, verify the repository, have the Engineer build it, get independent Auditor/Tester/DevSecOps review, loop corrections (max 4 executions per specialist), and return a reviewed Git branch with a short report.
-argument-hint: "<work-order file path, or task text with WO/REPO/ROOT fields>"
+argument-hint: "<work-order file path with WO/REPO/HOST/ROOT/WORKTREES fields>"
 allowed-tools: Bash Read Write Edit Glob Grep
 ---
 
@@ -20,18 +20,25 @@ Read the task (if it is a path, read the file). It must state:
 
 - `WO:` id (letters, digits, `._-`)
 - `REPO:` expected GitHub `OWNER/NAME`
+- `HOST:` exact verified execution/development host hostname (not the Orchestrator host)
 - `ROOT:` absolute path of the project's canonical checkout
+- `WORKTREES:` absolute path of the project's authorised worktree parent (a sibling of ROOT)
 - Optional: `BASE:` (default `main`), `KNOWN_COMMIT:` (a SHA from the project's
   history), `PUSH: no` (do not push), `BROWSER: yes` (browser behaviour is material)
 - The change requested and its acceptance criteria.
 
-Missing `WO`/`REPO`/`ROOT`, or contradictory acceptance criteria (a "preserve X"
+Missing `WO`/`REPO`/`HOST`/`ROOT`/`WORKTREES`, or contradictory acceptance criteria (a "preserve X"
 that cannot hold alongside a "change X"), is `BLOCKED` - return it; do not guess.
+Never infer a project directory from your current directory or a previous WO.
+If HOST is remote from the machine on which ForgeV2's tools execute, return
+BLOCKED; do not switch to Trinity's local filesystem, clone into `/tmp`, mount
+the remote project, or invent an SSH transport.
 
 ## 2. Start (identity gate)
 
 ```
-forge-start --wo <WO> --repo <OWNER/NAME> --root <ROOT> [--base B] [--known-commit SHA]
+forge-start --wo <WO> --repo <OWNER/NAME> --host <HOST> --root <ROOT> \
+  --worktrees <WORKTREES> [--base B] [--known-commit SHA]
 ```
 
 It rejects a wrong owner/name, look-alike remotes, a mismatched push URL, a
@@ -43,6 +50,8 @@ the worktree). It prints `worktree`, `scratch`, `records` and `base_sha`.
 A rejection is `BLOCKED` with its message. Never work around it (no cloning,
 re-pointing remotes, or editing ROOT). Re-running `forge-start` resumes a WO;
 counts never reset.
+Treat the ForgeV2 engine and Foundry installation paths as immutable for every
+application WO. Changes to either are separate, expressly authorised framework WOs.
 
 From here, the Engineer changes the printed worktree; you never edit it (or
 `ROOT`) yourself, and you never write into the scratch directory.

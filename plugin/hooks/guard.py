@@ -171,6 +171,8 @@ def main():
 def _file_rules(tool, ti, d, cwd, private):
     paths = [ti.get(k) for k in ("file_path", "notebook_path", "path") if ti.get(k)]
     for p in (os.path.join(cwd, x) for x in paths):
+        if tool in WRITE_TOOLS and any(under(p, q) for q in F.PROTECTED_INSTALLS):
+            deny("Foundry and ForgeV2 installations are immutable during application Work Orders")
         if tool in WRITE_TOOLS and (STATE.search(os.path.realpath(p)) or any(under(p, x) for x in private)):
             deny("the ledger and dispatch outputs are changed only through forge-* tools")
         for area in (d["worktree"], d["scratch"]):

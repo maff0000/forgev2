@@ -12,6 +12,7 @@ import json
 import os
 import random
 import shutil
+import socket
 import string
 import subprocess
 import sys
@@ -118,7 +119,9 @@ class Base(unittest.TestCase):
                               capture_output=True, text=True)
 
     def start(self, *extra, repo=OWNER_REPO, env=None):
-        return self.run_bin("forge-start", "--wo", "WO-1", "--repo", repo, "--root", self.root, *extra, env=env)
+        return self.run_bin("forge-start", "--wo", "WO-1", "--repo", repo,
+                            "--host", socket.gethostname(), "--root", self.root,
+                            "--worktrees", os.path.join(self.tmp, "src", "worktrees"), *extra, env=env)
 
     def started(self):
         r = self.start("--known-commit", self.base)
@@ -292,6 +295,36 @@ class IdentityGate(Base):
             self.assertEqual(r.returncode, 1, label)
             self.assertIn("REJECTED", r.stderr, label)
 
+    def test_missing_explicit_host_or_worktree_refused_before_git_change(self):
+        for fields in (("--root", self.root, "--worktrees", os.path.join(self.tmp, "src", "worktrees")),
+                       ("--host", socket.gethostname(), "--root", self.root)):
+            r = self.run_bin("forge-start", "--wo", "WO-1", "--repo", OWNER_REPO, *fields)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("required", r.stderr)
+        self.assertEqual(self.sh("git branch --list 'forge/*'", cwd=self.root).stdout.strip(), "")
+
+    def test_wrong_execution_host_blocks_before_changes(self):
+        r = self.start("--host", "a-different-build-host.invalid")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("remote execution is not configured", r.stderr)
+        self.assertIn("remote execution is not configured", self.start("--host", "203.0.113.111").stderr)
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "src", "worktrees")))
+
+    def test_target_path_boundary(self):
+        canonical_worktrees = os.path.join(self.tmp, "src", "worktrees")
+        non_sibling = os.path.join(self.tmp, "elsewhere", "worktrees")
+        self.assertIn("distinct siblings", self.start("--worktrees", non_sibling).stderr)
+        self.assertIn("distinct siblings", self.start("--worktrees", self.root).stderr)
+        self.assertIn("canonical path", self.start("--root", self.root + "/../calc").stderr)
+        os.symlink(self.root, os.path.join(self.tmp, "alias"))
+        self.assertIn("canonical path", self.start("--root", os.path.join(self.tmp, "alias")).stderr)
+        # An explicit protected root cannot be disguised by choosing a child as the checkout.
+        from unittest.mock import patch
+        with patch.object(F, "PROTECTED_INSTALLS", (os.path.join(self.tmp, "src"),)):
+            with self.assertRaisesRegex(F.ForgeError, "protected Foundry/ForgeV2 installation"):
+                F.validate_project_target(socket.gethostname(), self.root, canonical_worktrees)
+        self.assertEqual(self.sh("git branch --list 'forge/*'", cwd=self.root).stdout.strip(), "")
+
     def test_missing_git_identity_refused_before_any_change(self):
         env = {k: v for k, v in self.env.items() if not k.startswith(("GIT_AUTHOR_", "GIT_COMMITTER_"))}
         with open(os.path.join(self.tmp, ".gitconfig"), "w") as f:
@@ -325,7 +358,8 @@ class IdentityGate(Base):
 
     def test_rejects_subdirectory_as_root(self):
         os.makedirs(os.path.join(self.root, "sub"))
-        r = self.run_bin("forge-start", "--wo", "WO-1", "--repo", OWNER_REPO, "--root", os.path.join(self.root, "sub"))
+        r = self.start("--root", os.path.join(self.root, "sub"),
+                       "--worktrees", os.path.join(self.root, "worktrees"))
         self.assertIn("not the repository top level", r.stderr)
 
     def test_rejects_unrelated_existing_directory(self):
@@ -585,6 +619,12 @@ class Guard(Base):
             self.assertEqual(self.guard("Edit", {"file_path": p}), "deny", p)
         self.assertEqual(self.guard("Read", {"file_path": os.path.join(self.wt, "calc.py")}), "allow")
 
+    def test_pl_file_tools_cannot_modify_engine_or_foundry(self):
+        for p in ("/srv/forgev2/plugin/README.md", "/srv/foundry/README.md",
+                  os.path.join(PLUGIN, "roles", "engineer.md")):
+            self.assertEqual(self.guard("Write", {"file_path": p, "content": "x"}), "deny", p)
+            self.assertEqual(self.guard("Edit", {"file_path": p}), "deny", p)
+
     def test_pl_does_not_follow_links_planted_in_the_worktree(self):
         secret = os.path.join(self.tmp, "pl-secret")
         with open(secret, "w") as f:
@@ -800,7 +840,9 @@ class Sandbox(Base):
         inside = os.path.join(self.env["FORGE_STATE_DIR"], "proj", "calc")
         self.sh(f"git clone -q {self.root} {inside} && git -C {inside} remote set-url origin "
                 f"https://github.com/{OWNER_REPO}.git")
-        r = self.run_bin("forge-start", "--wo", "WO-2", "--repo", OWNER_REPO, "--root", inside)
+        r = self.run_bin("forge-start", "--wo", "WO-2", "--repo", OWNER_REPO,
+                         "--host", socket.gethostname(), "--root", inside,
+                         "--worktrees", os.path.join(os.path.dirname(inside), "worktrees"))
         self.assertEqual(r.returncode, 1)
         self.assertIn("specialists cannot read", r.stderr)
 
