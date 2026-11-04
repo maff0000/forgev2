@@ -1,0 +1,14 @@
+{
+  "name": "forgev2",
+  "description": "ForgeV2 AI-first software delivery engine.",
+  "owner": {
+    "name": "Matthew Scott"
+  },
+  "plugins": [
+    {
+      "name": "forgev2",
+      "source": "./plugin",
+      "description": "ForgeV2 delivery engine: Project Lead, Engineer, Auditor, Tester and DevSecOps with a bounded correction loop."
+    }
+  ]
+}

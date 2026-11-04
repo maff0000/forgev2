@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""forge-commit: PL commit of the Engineer's work as the review candidate.
+
+Usage: forge-commit -m MESSAGE
+While the Work Order is open: only when the next step is COMMIT, only on top of
+the previous candidate (or the base), stages everything except .forge/, blocks on
+any gitleaks finding and records the new commit as the candidate (invalidating
+earlier reviewer results). After forge-ledger close: publishes the delivery
+record (ledger, REPORT.md, prompts, raw dispatch outputs) from the PL's records
+directory into .forge/<WO>/ and commits only those files.
+Runs only the hooks in the PL-owned Git directory, never hooks from the worktree.
+"""
+import argparse
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "lib"))
+import forgelib as F  # noqa: E402
+
+
+def main():
+    a = argparse.ArgumentParser()
+    a.add_argument("-m", "--message", required=True)
+    a.add_argument("--ledger")
+    o = a.parse_args()
+    F.require_non_root()
+    path = o.ledger or F.ledger_for_session(os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
+    if not path:
+        raise F.ForgeError("no Work Order is bound to this session; run forge-start first")
+    with F.locked_ledger(path) as d:
+        F.check_repo(d["root"], d["repo"], d["known_commit"])
+        if F.wgit(d, "branch", "--show-current") != d["branch"]:
+            raise F.ForgeError(f"worktree is not on {d['branch']}")
+        F.gitleaks_bin()
+        head = F.wgit(d, "rev-parse", "HEAD")
+        anchor = d["candidate"] or d["base_sha"]
+        if d["outcome"]:
+            changed = F.wgit(d, "diff", "--no-renames", "--name-only", f"{anchor}..HEAD").splitlines()
+            if not F.is_ancestor(d, anchor, "HEAD") or not F.record_paths_ok(d, changed):
+                raise F.ForgeError("commits after the reviewed candidate contain more than delivery records")
+            status = F.wgit(d, "status", "--porcelain", "--untracked-files=all", "--no-renames").splitlines()
+            if not F.record_paths_ok(d, [line[3:] for line in status]):
+                raise F.ForgeError("Work Order is closed: only the delivery record under .forge/<WO>/ may be "
+                                   "committed; other changes in the worktree are unreviewed")
+            F.publish_records(d, path)
+            status = F.wgit(d, "status", "--porcelain", "--untracked-files=all", "--no-renames").splitlines()
+            paths = [line[3:] for line in status]
+            if not paths:
+                raise F.ForgeError("nothing to commit")
+            if not F.record_paths_ok(d, paths):
+                raise F.ForgeError("Work Order is closed: only the delivery record under .forge/<WO>/ may be "
+                                   "committed; other changes in the worktree are unreviewed")
+            F.wgit(d, "add", "-A", "--", *paths)
+        else:
+            if F.pending(d):
+                raise F.ForgeError("a dispatch is awaiting its result; record it before committing")
+            decision, reason = F.decide(d)
+            if decision != "COMMIT":
+                raise F.ForgeError(f"commit not permitted: next step is {decision} ({reason})")
+            if head != anchor:
+                raise F.ForgeError(f"HEAD {head[:12]} is not the previous candidate/base {anchor[:12]}: "
+                                   "commits were made outside forge-commit; the Work Order must be BLOCKED")
+            F.wgit(d, "add", "-A", "--", ".", ":!.forge")
+            if not F.wgit(d, "diff", "--cached", "--name-only"):
+                d["events"].append({"t": F.now(), "type": "no_change", "round": d["round"]})
+                return f"nothing to commit: {' - '.join(F.decide(d))}"
+        if not F.gitleaks_scan(d, "--pre-commit", "--staged"):
+            F.wgit(d, "reset", "-q")
+            raise F.ForgeError("gitleaks reported a likely secret; nothing was committed")
+        F.wgit(d, "-c", f"core.hooksPath={os.path.join(d['common_dir'], 'hooks')}", "commit", "-q", "-m", o.message)
+        head = F.wgit(d, "rev-parse", "HEAD")
+        if d["outcome"]:
+            F.emit({"records_commit": head, "outcome": d["outcome"]})
+            return
+        d["candidate"] = head
+        d["events"].append({"t": F.now(), "type": "candidate", "sha": head, "round": d["round"]})
+        F.emit({"candidate": head, "round": d["round"], "decision": F.decide(d)[0], "needs_review": F.needs_review(d)})
+
+
+if __name__ == "__main__":
+    try:
+        problem = main()
+        if problem:
+            print(f"forge-commit: {problem}", file=sys.stderr)
+            sys.exit(1)
+    except F.ForgeError as e:
+        print(f"forge-commit: {e}", file=sys.stderr)
+        sys.exit(1)

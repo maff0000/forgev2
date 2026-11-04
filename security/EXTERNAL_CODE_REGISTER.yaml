@@ -20,9 +20,34 @@ incorporated_components_verified: []
 external_runtime_or_development_tools_observed:
   - name: Claude Code
     version_reported: 2.1.310
-    role: external agent runtime used in disposable plugin experiment
+    role: >-
+      agent runtime for the PL and for every specialist run (both under forgev2-pl, one login);
+      its sandbox confines the specialists' commands and file tools
     repository_incorporation: false
+    provenance: >-
+      Anthropic native installer for root on the development host
+      (~/.local/share/claude/versions/2.1.310). Stage B copied that same file, unchanged,
+      to /usr/local/bin/claude (root:root 0755) so the non-root PL account runs a
+      root-owned binary; SHA-256 b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56
+      before and after the copy. No new download.
+    use_control: >-
+      forge-dispatch refuses to start a specialist unless /usr/local/bin/claude and its
+      directory are root-owned and not group/world-writable; runs set DISABLE_AUTOUPDATER=1.
     licence_and_supply_chain_assessment: pending
+    approval: not_established_by_this_record
+  - name: bubblewrap
+    version_reported: 0.8.0-2+deb12u1
+    role: namespace sandbox that Claude Code uses to run specialist commands (not setuid)
+    repository_incorporation: false
+    provenance: Debian bookworm package, installed 2026-10-26 with apt (log /var/log/forgev2-stage-b-001/sandbox-changes.log).
+    licence_and_supply_chain_assessment: Debian-maintained system package (LGPL-2.0+); not separately assessed.
+    approval: not_established_by_this_record
+  - name: socat
+    version_reported: 1.7.4.4-2
+    role: relay Claude Code's sandbox uses for its network proxy
+    repository_incorporation: false
+    provenance: Debian bookworm package, already installed on the host.
+    licence_and_supply_chain_assessment: Debian-maintained system package (GPL-2); not separately assessed.
     approval: not_established_by_this_record
   - name: Git
     version_reported: 2.39.5
@@ -31,10 +56,23 @@ external_runtime_or_development_tools_observed:
     licence_and_supply_chain_assessment: pending
     approval: not_established_by_this_record
   - name: gitleaks
-    version_reported: unknown_not_installed_at_preflight
-    role: required by inherited ForgeV1 bootstrap and committed Git hook
+    version_reported: 8.30.1
+    role: secret scanning in the committed Git hook and in the ForgeV2 plugin's forge-commit and forge-push
     repository_incorporation: false
-    licence_and_supply_chain_assessment: pending
+    provenance: >-
+      Official GitHub release v8.30.1 (gitleaks_8.30.1_linux_x64.tar.gz); archive
+      SHA-256 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb matched
+      the release-published digest; installed binary only to /usr/local/bin on the
+      development host. Not packaged by Debian bookworm.
+    use_control: >-
+      The plugin accepts only a root-owned, non-writable binary at /usr/local/bin or
+      /usr/bin whose SHA-256 is pinned in plugin/lib/forgelib.py
+      (88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509) or listed by
+      the operator in FORGE_GITLEAKS_SHA256.
+    licence_and_supply_chain_assessment: >-
+      MIT licence (upstream LICENSE). Single static Go binary run as a subprocess; no
+      code incorporated. Integrity: release digest verified, binary hash pinned.
+      Assessed by Claude during FORGEV2-PLUGIN-BUILD-001; not independently reviewed.
     approval: not_established_by_this_record
 security_approvals_recorded: []
 approved_exceptions_recorded: []

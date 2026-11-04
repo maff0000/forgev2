@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""forge-start: verify repository identity, create the WO branch/worktree, open the ledger.
+
+Usage: forge-start --wo ID --repo OWNER/NAME --host VERIFIED_HOST --root CHECKOUT
+                   --worktrees WORKTREE_DIR [--base BRANCH] [--known-commit SHA]
+Re-running for an existing Work Order resumes it; execution counts are never reset.
+The ledger and the delivery records are kept in the PL's private state directory,
+outside the worktree. Projects and worktrees must be outside the PL's home and
+state directories, which specialists cannot read.
+"""
+import argparse
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "lib"))
+import forgelib as F  # noqa: E402
+
+
+def main():
+    a = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    a.add_argument("--wo", required=True)
+    a.add_argument("--repo", required=True)
+    a.add_argument("--host", required=True)
+    a.add_argument("--root", required=True)
+    a.add_argument("--base", default="main")
+    a.add_argument("--known-commit")
+    a.add_argument("--worktrees", required=True)
+    o = a.parse_args()
+    root_override = F.require_non_root()
+    if not F.WO_RE.match(o.wo):
+        raise F.ForgeError(f"invalid Work Order id {o.wo!r}")
+    target_root, wt_parent = F.validate_project_target(o.host, o.root, o.worktrees)
+    facts = F.check_repo(target_root, o.repo, o.known_commit)
+    root = facts["root"]
+    for ident in ("GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT"):
+        if F.git_run("var", ident, cwd=root).returncode:
+            raise F.ForgeError("this account has no Git author identity; set user.name and user.email "
+                               "for it before starting a Work Order (INSTALL.md)")
+    branch = f"forge/{o.wo}"
+    wt = os.path.join(wt_parent, o.wo)
+    ledger = F.ledger_path(root, o.wo)
+    if os.path.exists(ledger):
+        with F.locked_ledger(ledger, write=False) as d:
+            if (d["repo"], d["root"], d["worktree"], d["wo"], d.get("host")) != (facts["repo"], root, wt, o.wo, o.host.lower()):
+                raise F.ForgeError("existing ledger belongs to a different repository or worktree")
+            if not os.path.isdir(wt):
+                raise F.ForgeError(f"ledger exists but worktree {wt} is missing; use a new Work Order id")
+        resumed = True
+    else:
+        if os.path.lexists(wt):
+            raise F.ForgeError(f"{wt} exists but has no ForgeV2 ledger; refusing to reuse it")
+        base_sha = F.git("rev-parse", "--verify", f"{o.base}^{{commit}}", cwd=root)
+        if F.git_run("cat-file", "-e", f"{base_sha}:.forge/{o.wo}", cwd=root).returncode == 0:
+            raise F.ForgeError(f"base already contains records for {o.wo}; use a new Work Order id")
+        if F.git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", cwd=root, check=False):
+            raise F.ForgeError(f"branch {branch} already exists without a ledger; resolve manually")
+        F.require_outside_private(root, wt_parent)
+        scratch = os.path.join(wt_parent, ".forge-scratch", o.wo)
+        try:
+            os.makedirs(wt_parent, exist_ok=True)
+            if os.path.lexists(scratch):
+                raise F.ForgeError(f"{scratch} already exists; use a new Work Order id")
+            os.makedirs(scratch, mode=0o700)
+        except OSError as e:
+            raise F.ForgeError(f"cannot create the worktree area {wt_parent}: {e}")
+        F.git("worktree", "add", "-q", "-b", branch, wt, base_sha, cwd=root)
+        # Record the worktree's Git directory now, while it is known-good; later
+        # operations never read the worktree's own `.git` pointer file.
+        git_dir = os.path.realpath(F.git("rev-parse", "--absolute-git-dir", cwd=wt))
+        if os.path.dirname(git_dir) != os.path.join(facts["common_dir"], "worktrees"):
+            raise F.ForgeError(f"unexpected worktree Git directory {git_dir}")
+        F.prepare_worktree(wt)
+        records = F.records_root(root, o.wo)
+        for p in (os.path.dirname(os.path.dirname(records)), os.path.dirname(records), records,
+                  os.path.join(records, "prompts")):
+            F._private_dir(p)
+        d = F.new_ledger(o.wo, facts, wt, git_dir, branch, o.base, base_sha, o.known_commit, scratch, records)
+        d["host"] = o.host.lower()
+        if root_override:
+            d["events"].append({"t": F.now(), "type": "root_override", "uid": 0})
+        F.write_new_ledger(ledger, d)
+        resumed = False
+    with F.locked_ledger(ledger, write=False) as d:
+        # Distinguishing check: the worktree must carry the project's own history.
+        probe = d["known_commit"] or d["base_sha"]
+        if F.wgit(d, "cat-file", "-t", probe, check=False) != "commit":
+            raise F.ForgeError("worktree does not resolve the project's history; it is not of this repository")
+        if F.wgit(d, "branch", "--show-current") != branch:
+            raise F.ForgeError(f"worktree is not on {branch}")
+        session = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+        if session:
+            F.bind_session(session, ledger)
+        F.emit({"resumed": resumed, "host": o.host.lower(), "worktree": wt, "branch": branch, "ledger": ledger,
+                "session_bound": bool(session), "counts": d["counts"], "limit": F.LIMIT,
+                "scratch": d["scratch"], "records": d["records"], "base_sha": d["base_sha"], "candidate": d["candidate"],
+                "decision": F.decide(d)[0], "root_override": root_override})
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except F.ForgeError as e:
+        print(f"forge-start: REJECTED: {e}", file=sys.stderr)
+        sys.exit(1)
