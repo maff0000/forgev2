@@ -51,6 +51,23 @@ the remote execution mechanism must be explicitly installed and tested before
 the Orchestrator can deliver to a different host. Do not substitute a local
 checkout or use a temp directory to get past this gate.
 
+## Remote development host (controller is another machine)
+
+On the development host, as root, once: install a root-owned copy of the same ForgeV2 revision (for
+`plugin/remote/forge-remote` only), create an unprivileged account (`forgev2-dev`) with a Git identity,
+bubblewrap, an approved gitleaks, and a project base directory it owns. On the controller create a
+dedicated key and pin the host key (compare its fingerprint with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the host):
+
+```sh
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/forge_remote
+ssh-keyscan -t ed25519 <address> > ~/.ssh/forge_remote_known_hosts
+# on the host, in forgev2-dev's ~/.ssh/authorized_keys (one line):
+command="/usr/bin/python3 <root-owned>/plugin/remote/forge-remote --base <project base>",restrict ssh-ed25519 AAAA… forge-remote
+```
+
+The key can run only that helper, only inside `<project base>`. For a push, give `forgev2-dev` a
+repository-scoped deploy key; it never leaves the host.
+
 ## Claude's to-do list
 
 1. **Discover the environment:** Identify the approved host, current Orchestrator/Claude setup, and whether this machine is the controller or an execution VPS. Reuse the existing control plane; do not duplicate the Orchestrator.

@@ -56,14 +56,24 @@ sudo -u forgev2-pl -H sh -c 'cd && exec env DISABLE_AUTOUPDATER=1 \
   "/forgev2:deliver $3" < /dev/null' sh "$ROOT" "$WORKTREES" /path/to/WO-123.md
 ```
 
-The `--plugin-dir` above is the **planned** Trinity layout; use the exact
-root-owned plugin directory verified at deployment (the previously tested VPS
-copy used `/srv/forgev2/src/plugin`). This example is not proof Trinity is
-installed or that a remote execution route exists. ForgeV2's current tools
-run locally. If `HOST` is another machine (e.g. the CRM development host),
-first arrange and test a bounded way to start the PL on that approved host
-with the same immutable engine version; without it the WO is BLOCKED. Do not
-run the WO against Trinity's paths or create an arbitrary local checkout.
+### When HOST is another machine (remote execution)
+
+ForgeV2 stays installed on the controller (Trinity: `/srv/forgev2`). The PL and every specialist run
+there under the one Claude login; only the project lives on `HOST`. Do not pass `--add-dir` for the
+remote paths. Provide the SSH transport instead:
+
+```sh
+FORGE_REMOTE_KEY=~/.ssh/forge_remote  FORGE_REMOTE_KNOWN_HOSTS=~/.ssh/forge_remote_known_hosts \
+FORGE_REMOTE_ADDRS=<HOST>=<address>   claude -p --plugin-dir /srv/forgev2/plugin ... "/forgev2:deliver WO.md"
+```
+
+`forge-start` confirms the machine reached over SSH really is `HOST` (it reports its own names) and that
+`ROOT` and `WORKTREES` are canonical siblings inside the base directory the host operator fixed in the
+key's `authorized_keys` line (`command="…/forge-remote --base <dir>",restrict`). A missing key, an
+unreachable host, a changed host key, a different machine or a path outside the base is BLOCKED.
+The ledger, limits and decisions stay on the controller; Git, file edits and project tests run only on
+`HOST`. Specialists get Read/Grep/Glob/Edit/Write/Bash through the `forge` MCP bridge, not local tools;
+commands run in bubblewrap on `HOST` with no network. Host-side setup is in `INSTALL.md`.
 
 Start it in the PL's home directory, never inside `ROOT` or a worktree: Claude
 loads project settings and CLAUDE.md from its starting directory, and worktree
