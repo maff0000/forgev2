@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""forge-mcp: stdio MCP bridge that gives one ForgeV2 specialist file and command tools on the
+development host. Started by that specialist's own `claude -p` (see forgelib._remote_specialist_command);
+the role, worktree and scratch directory are fixed on its command line by the harness, so the
+model cannot change them. Each tool call becomes one request to `forge-remote` over SSH.
+Standard library only.
+"""
+import argparse
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "lib"))
+import forgelib as F  # noqa: E402
+
+PROTOCOL = "2024-11-05"
+SCHEMAS = {
+    "Read": ("Read a file (worktree or scratch directory) on the development host.",
+             {"file_path": "string", "offset": "integer", "limit": "integer"}, ["file_path"]),
+    "Grep": ("Search file contents with a regular expression.",
+             {"pattern": "string", "path": "string", "glob": "string", "-i": "boolean", "head_limit": "integer"},
+             ["pattern"]),
+    "Glob": ("Find files by glob pattern.", {"pattern": "string", "path": "string"}, ["pattern"]),
+    "Write": ("Write a whole file in the worktree or scratch directory.",
+              {"file_path": "string", "content": "string"}, ["file_path", "content"]),
+    "Edit": ("Replace an exact string in a file.",
+             {"file_path": "string", "old_string": "string", "new_string": "string", "replace_all": "boolean"},
+             ["file_path", "old_string", "new_string"]),
+    "Bash": ("Run a command on the development host in a sandbox: no network, writable only where "
+             "your role allows.", {"command": "string", "timeout": "integer"}, ["command"]),
+}
+OPS = {"Read": "read", "Grep": "grep", "Glob": "glob", "Write": "write", "Edit": "edit", "Bash": "exec"}
+
+
+def tool_defs(allowed):
+    out = []
+    for name in allowed:
+        desc, props, req = SCHEMAS[name]
+        out.append({"name": name, "description": desc, "inputSchema": {
+            "type": "object", "properties": {k: {"type": t} for k, t in props.items()}, "required": req}})
+    return out
+
+
+def text(s, error=False):
+    return {"content": [{"type": "text", "text": s}], "isError": error}
+
+
+def call(remote, ctx, name, args):
+    op = OPS[name]
+    req = dict(ctx, **{k: v for k, v in args.items() if k in SCHEMAS[name][1]})
+    if op == "exec":
+        req["command"] = args["command"]
+        req["timeout"] = min(int(args.get("timeout") or 120), 1500)
+        r = remote.call("exec", **req)
+        out = r["stdout"] + (("\n[stderr]\n" + r["stderr"]) if r["stderr"] else "")
+        return text(out + f"\n[exit {r['rc']}]", error=r["rc"] != 0)
+    return text(remote.call(op, **req)["text"])
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--host", required=True)
+    ap.add_argument("--role", required=True, choices=F.ROLES)
+    ap.add_argument("--worktree", required=True)
+    ap.add_argument("--scratch", required=True)
+    ap.add_argument("--tools", required=True)
+    o = ap.parse_args()
+    allowed = [t for t in o.tools.split(",") if t in SCHEMAS]
+    if o.role != "engineer":
+        allowed = [t for t in allowed if t not in ("Write", "Edit")]
+    remote = F.Remote(o.host)
+    ctx = {"role": o.role, "worktree": o.worktree, "scratch": o.scratch}
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        mid, method = msg.get("id"), msg.get("method")
+        if method == "initialize":
+            res = {"protocolVersion": (msg.get("params") or {}).get("protocolVersion", PROTOCOL),
+                   "capabilities": {"tools": {}}, "serverInfo": {"name": "forge", "version": "0.4.0"}}
+        elif method == "tools/list":
+            res = {"tools": tool_defs(allowed)}
+        elif method == "tools/call":
+            p = msg.get("params") or {}
+            name = p.get("name")
+            if name not in allowed:
+                res = text(f"tool {name!r} is not available to the {o.role}", True)
+            else:
+                try:
+                    res = call(remote, ctx, name, p.get("arguments") or {})
+                except (F.ForgeError, KeyError, ValueError) as e:
+                    res = text(f"{e}", True)
+        elif mid is None:
+            continue  # notification
+        else:
+            sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": mid,
+                                         "error": {"code": -32601, "message": "method not found"}}) + "\n")
+            sys.stdout.flush()
+            continue
+        if mid is not None:
+            sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": mid, "result": res}) + "\n")
+            sys.stdout.flush()
+
+
+if __name__ == "__main__":
+    main()

@@ -53,7 +53,12 @@ FAKE_CLAUDE = r'''#!/usr/bin/python3
 # Test stand-in for a specialist `claude -p` run: argv as built by forge-dispatch, prompt on stdin.
 import json, os, subprocess, sys
 role = os.environ["FORGE_ROLE"]
-wt = json.loads(sys.argv[sys.argv.index("--settings") + 1])["sandbox"]["filesystem"]["denyWrite"][0][:-len("/.git")]
+mcp = json.loads(sys.argv[sys.argv.index("--mcp-config") + 1])["mcpServers"] if "--mcp-config" in sys.argv else {}
+if "forge" in mcp:  # remote Work Order: the harness names the worktree for the bridge
+    a = mcp["forge"]["args"]
+    wt = a[a.index("--worktree") + 1]
+else:
+    wt = json.loads(sys.argv[sys.argv.index("--settings") + 1])["sandbox"]["filesystem"]["denyWrite"][0][:-len("/.git")]
 d = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "fake")
 open(os.path.join(d, role + ".prompt"), "wb").write(sys.stdin.buffer.read())
 json.dump({"argv": sys.argv[1:], "env": dict(os.environ)}, open(os.path.join(d, role + ".argv.json"), "w"))
@@ -71,7 +76,14 @@ sys.exit(code)
 REPORT_LINE = {"pass": "VERDICT: PASS", "findings": "VERDICT: FINDINGS", "inconclusive": "VERDICT: INCONCLUSIVE"}
 
 
+HELPER = os.path.join(PLUGIN, "remote", "forge-remote")
+MCP = os.path.join(PLUGIN, "remote", "forge-mcp")
+
+
 class Base(unittest.TestCase):
+    REMOTE = False       # True: the Work Order's HOST is another machine, reached through a test double for ssh
+    HOST = None
+
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="forgev2-test-")
         os.chmod(self.tmp, 0o700)
@@ -95,6 +107,25 @@ class Base(unittest.TestCase):
                 "git add -A && git commit -qm init", cwd=self.root)
         self.sh(f"git remote add origin https://github.com/{OWNER_REPO}.git", cwd=self.root)
         self.base = self.sh("git rev-parse HEAD", cwd=self.root).stdout.strip()
+        if self.REMOTE:
+            self.setup_remote()
+
+    def setup_remote(self, protect=""):
+        """The test double for ssh runs the real forge-remote helper on this machine, claiming to be
+        `devhost.test`, confined to <tmp>/src as the host operator's authorized_keys line would do."""
+        with open(os.path.join(self.tmp, ".gitconfig"), "w") as f:
+            f.write("[user]\n\tname = dev\n\temail = dev@invalid.example\n")
+        self.fakessh = os.path.join(self.tmp, "fakessh")
+        with open(self.fakessh, "w") as f:
+            f.write(f"#!/bin/sh\nFORGE_ALLOW_ROOT=1 FORGE_HELPER_HOSTNAME=devhost.test FORGE_HELPER_HOME={self.tmp} "
+                    f"GIT_ALLOW_PROTOCOL=file exec {sys.executable} {HELPER} --base {os.path.join(self.tmp, 'src')} {protect}\n")
+        os.chmod(self.fakessh, 0o755)
+        open(os.path.join(self.tmp, "key"), "w").close()
+        extra = dict(FORGE_REMOTE_SSH=self.fakessh, FORGE_REMOTE_KEY=os.path.join(self.tmp, "key"),
+                     FORGE_REMOTE_KNOWN_HOSTS=os.path.join(self.tmp, "kh"))
+        self.env.update(extra)
+        self._saved.update({k: os.environ.get(k) for k in extra})
+        os.environ.update(extra)
 
     def tearDown(self):
         for k, v in self._saved.items():
@@ -120,7 +151,7 @@ class Base(unittest.TestCase):
 
     def start(self, *extra, repo=OWNER_REPO, env=None):
         return self.run_bin("forge-start", "--wo", "WO-1", "--repo", repo,
-                            "--host", socket.gethostname(), "--root", self.root,
+                            "--host", self.HOST or socket.gethostname(), "--root", self.root,
                             "--worktrees", os.path.join(self.tmp, "src", "worktrees"), *extra, env=env)
 
     def started(self):
@@ -306,7 +337,7 @@ class IdentityGate(Base):
     def test_wrong_execution_host_blocks_before_changes(self):
         r = self.start("--host", "a-different-build-host.invalid")
         self.assertEqual(r.returncode, 1)
-        self.assertIn("remote execution is not configured", r.stderr)
+        self.assertIn("no SSH transport", r.stderr)
         self.assertIn("remote execution is not configured", self.start("--host", "203.0.113.111").stderr)
         self.assertFalse(os.path.exists(os.path.join(self.tmp, "src", "worktrees")))
 
@@ -1097,6 +1128,155 @@ class DeliveryEndToEnd(Base):
         r = self.run_bin("forge-push")
         self.assertEqual(r.returncode, 1)
         self.assertIn("pushes only forge/<WO>", r.stderr)
+
+
+class RemoteDelivery(DeliveryEndToEnd):
+    """Every end-to-end rule above, again with HOST on another machine (ssh test double)."""
+    REMOTE = True
+    HOST = "devhost.test"
+
+    def test_remote_ledger_and_specialist_use_the_bridge(self):
+        self.started()
+        d = load(self.ledger)
+        self.assertTrue(d["remote"])
+        self.assertEqual(d["host"], "devhost.test")
+        self.build()
+        argv = load(os.path.join(self.fake, "engineer.argv.json"))["argv"]
+        self.assertEqual(argv[argv.index("--tools") + 1], "")  # built-in file/command tools are off
+        mcp = json.loads(argv[argv.index("--mcp-config") + 1])["mcpServers"]["forge"]
+        self.assertIn("--role", mcp["args"])
+        self.assertEqual(mcp["args"][mcp["args"].index("--worktree") + 1], self.wt)
+        self.assertEqual(argv[argv.index("--allowedTools") + 1].split(",")[0].split("__")[0], "mcp")
+
+
+class RemoteRules(Base):
+    REMOTE = True
+    HOST = "devhost.test"
+
+    def rejected(self, r, *words):
+        self.assertEqual(r.returncode, 1, r.stdout)
+        for w in words:
+            self.assertIn(w, r.stderr)
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "src", "worktrees")), "no worktree may be created")
+
+    def test_remote_start_succeeds(self):
+        info = self.started()
+        self.assertEqual(info["host"], "devhost.test")
+        self.assertTrue(os.path.isdir(info["worktree"]))
+
+    def test_host_identity_mismatch_is_blocked(self):
+        self.HOST = "another-host"
+        self.rejected(self.start(), "identity mismatch", "BLOCKED")
+
+    def test_unavailable_transport_is_blocked(self):
+        env = dict(self.env, FORGE_REMOTE_SSH="/bin/false")
+        self.rejected(self.start(env=env), "SSH transport", "BLOCKED")
+
+    def test_missing_key_is_blocked(self):
+        env = dict(self.env, FORGE_REMOTE_KEY=os.path.join(self.tmp, "nokey"))
+        self.rejected(self.start(env=env), "no SSH transport", "BLOCKED")
+
+    def test_root_outside_the_hosts_base_is_refused(self):
+        r = self.run_bin("forge-start", "--wo", "WO-1", "--repo", OWNER_REPO, "--host", self.HOST,
+                         "--root", "/srv", "--worktrees", "/srv/w")
+        self.rejected(r, "outside the designated project base")
+
+    def test_symlinked_root_is_refused(self):
+        os.symlink(self.root, os.path.join(self.tmp, "src", "alias"))
+        r = self.run_bin("forge-start", "--wo", "WO-1", "--repo", OWNER_REPO, "--host", self.HOST,
+                         "--root", os.path.join(self.tmp, "src", "alias"),
+                         "--worktrees", os.path.join(self.tmp, "src", "w"))
+        self.rejected(r, "canonical")
+
+    def test_non_sibling_worktrees_are_refused(self):
+        r = self.run_bin("forge-start", "--wo", "WO-1", "--repo", OWNER_REPO, "--host", self.HOST,
+                         "--root", self.root, "--worktrees", os.path.join(self.tmp, "src", "calc", "inner"))
+        self.rejected(r, "siblings")
+
+    def test_protected_installation_is_refused(self):
+        self.setup_remote(protect=f"--protect {self.root}")
+        self.rejected(self.start(), "protected installation")
+
+    def test_wrong_repository_is_refused_remotely(self):
+        self.rejected(self.start(repo="other-owner/calc"), "identity mismatch")
+
+    # --- the helper's own policy -------------------------------------------
+    def helper(self, **req):
+        r = subprocess.run([self.fakessh], input=json.dumps(req), capture_output=True, text=True, env=self.env)
+        return json.loads(r.stdout)
+
+    def test_helper_git_policy(self):
+        cwd = self.root
+        for args in (["-c", "core.sshCommand=touch /tmp/pwn", "status"], ["config", "user.name", "x"],
+                     ["remote", "add", "x", "https://example.invalid/x.git"], ["push", "origin", "main"],
+                     ["clone", "x", "y"], ["worktree", "add", "/etc/evil"], ["--exec-path=/tmp", "status"]):
+            self.assertIn("error", self.helper(op="git", args=args, cwd=cwd), args)
+        self.assertIn("error", self.helper(op="git", args=["status"], cwd=cwd, env={"GIT_SSH_COMMAND": "x"}))
+        self.assertEqual(self.helper(op="git", args=["rev-parse", "HEAD"], cwd=cwd)["stdout"].strip(), self.base)
+
+    def test_helper_refuses_unknown_operation_and_foreign_paths(self):
+        self.assertIn("error", self.helper(op="shell", command="id"))
+        self.assertIn("error", self.helper(op="git", args=["status"], cwd="/etc"))
+
+    # --- the specialist bridge ----------------------------------------------
+    def bridge(self, role, tools="Read,Grep,Glob,Edit,Write,Bash"):
+        info = self.started()
+        p = subprocess.Popen([sys.executable, MCP, "--host", self.HOST, "--role", role, "--worktree", info["worktree"],
+                              "--scratch", info["scratch"], "--tools", tools], stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE, text=True, env=self.env)
+        self.addCleanup(p.kill)
+        self._n = 0
+
+        def rpc(method, params=None):
+            self._n += 1
+            p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": self._n, "method": method, "params": params or {}}) + "\n")
+            p.stdin.flush()
+            return json.loads(p.stdout.readline())["result"]
+        rpc("initialize", {"protocolVersion": "2024-11-05"})
+        return info, rpc
+
+    def call(self, rpc, name, **args):
+        res = rpc("tools/call", {"name": name, "arguments": args})
+        return res["isError"], res["content"][0]["text"]
+
+    def test_engineer_bridge_edits_only_worktree_and_scratch(self):
+        info, rpc = self.bridge("engineer")
+        self.assertEqual({t["name"] for t in rpc("tools/list")["tools"]},
+                         {"Read", "Grep", "Glob", "Edit", "Write", "Bash"})
+        wt = info["worktree"]
+        self.assertFalse(self.call(rpc, "Write", file_path=wt + "/new.py", content="v = 1\n")[0])
+        self.assertFalse(self.call(rpc, "Edit", file_path=wt + "/new.py", old_string="1", new_string="2")[0])
+        self.assertIn("v = 2", open(wt + "/new.py").read())
+        self.assertIn("v = 2", self.call(rpc, "Read", file_path=wt + "/new.py")[1])
+        for bad in (self.root + "/calc.py", wt + "/.git", wt + "/.forge/x", "/etc/cron.d/x", self.tmp + "/outside"):
+            self.assertTrue(self.call(rpc, "Write", file_path=bad, content="x")[0], bad)
+        os.symlink("/etc", wt + "/link")
+        self.assertTrue(self.call(rpc, "Write", file_path=wt + "/link/passwd", content="x")[0])
+        self.assertTrue(self.call(rpc, "Read", file_path="/etc/passwd")[0])
+
+    def test_reviewer_bridge_cannot_write(self):
+        info, rpc = self.bridge("auditor")
+        self.assertEqual({t["name"] for t in rpc("tools/list")["tools"]}, {"Read", "Grep", "Glob", "Bash"})
+        self.assertTrue(self.call(rpc, "Write", file_path=info["worktree"] + "/x", content="x")[0])
+        self.assertFalse(os.path.exists(info["worktree"] + "/x"))
+
+    @unittest.skipUnless(os.access("/usr/bin/bwrap", os.X_OK), "bubblewrap not installed")
+    def test_bridge_commands_run_sandboxed(self):
+        info, rpc = self.bridge("engineer")
+        wt = info["worktree"]
+        err, out = self.call(rpc, "Bash", command=f"cd {wt} && echo hi > made.txt && python3 -m unittest -h >/dev/null; echo ok")
+        if "namespace" in out or "Operation not permitted" in out:
+            self.skipTest("unprivileged user namespaces unavailable here: " + out[:80])
+        self.assertTrue(os.path.exists(wt + "/made.txt"), out)
+        err, out = self.call(rpc, "Bash", command=f"echo x > {self.root}/planted.txt")
+        self.assertTrue(err or not os.path.exists(self.root + "/planted.txt"), "the main checkout must be read-only")
+        self.assertFalse(os.path.exists(self.root + "/planted.txt"))
+        err, out = self.call(rpc, "Bash", command=f"echo x > {wt}/.forge/planted")
+        self.assertFalse(os.path.exists(wt + "/.forge/planted"))
+        err, out = self.call(rpc, "Bash", command="curl -sS -m 3 https://example.com 2>&1 | head -1; echo done")
+        self.assertNotIn("<html", out.lower())
+        _, rout = self.call(rpc, "Bash", command=f"cat {self.tmp}/.gitconfig 2>&1 | head -2")
+        self.assertNotIn("dev@invalid", rout, "the helper account's home must be hidden from commands")
 
 
 if __name__ == "__main__":

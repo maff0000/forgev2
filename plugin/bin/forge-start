@@ -41,30 +41,32 @@ def main():
         with F.locked_ledger(ledger, write=False) as d:
             if (d["repo"], d["root"], d["worktree"], d["wo"], d.get("host")) != (facts["repo"], root, wt, o.wo, o.host.lower()):
                 raise F.ForgeError("existing ledger belongs to a different repository or worktree")
-            if not os.path.isdir(wt):
+            if not F.risdir(wt):
                 raise F.ForgeError(f"ledger exists but worktree {wt} is missing; use a new Work Order id")
         resumed = True
     else:
-        if os.path.lexists(wt):
+        if F.rlexists(wt):
             raise F.ForgeError(f"{wt} exists but has no ForgeV2 ledger; refusing to reuse it")
         base_sha = F.git("rev-parse", "--verify", f"{o.base}^{{commit}}", cwd=root)
         if F.git_run("cat-file", "-e", f"{base_sha}:.forge/{o.wo}", cwd=root).returncode == 0:
             raise F.ForgeError(f"base already contains records for {o.wo}; use a new Work Order id")
         if F.git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", cwd=root, check=False):
             raise F.ForgeError(f"branch {branch} already exists without a ledger; resolve manually")
-        F.require_outside_private(root, wt_parent)
+        if not F.remote():
+            F.require_outside_private(root, wt_parent)
         scratch = os.path.join(wt_parent, ".forge-scratch", o.wo)
         try:
-            os.makedirs(wt_parent, exist_ok=True)
-            if os.path.lexists(scratch):
+            F.rmakedirs(wt_parent)
+            if F.rlexists(scratch):
                 raise F.ForgeError(f"{scratch} already exists; use a new Work Order id")
-            os.makedirs(scratch, mode=0o700)
+            F.rmakedirs(os.path.join(wt_parent, ".forge-scratch"), private=True)
+            F.rmakedirs(scratch, private=True, exclusive=True)
         except OSError as e:
             raise F.ForgeError(f"cannot create the worktree area {wt_parent}: {e}")
         F.git("worktree", "add", "-q", "-b", branch, wt, base_sha, cwd=root)
         # Record the worktree's Git directory now, while it is known-good; later
         # operations never read the worktree's own `.git` pointer file.
-        git_dir = os.path.realpath(F.git("rev-parse", "--absolute-git-dir", cwd=wt))
+        git_dir = F.rpath(F.git("rev-parse", "--absolute-git-dir", cwd=wt))
         if os.path.dirname(git_dir) != os.path.join(facts["common_dir"], "worktrees"):
             raise F.ForgeError(f"unexpected worktree Git directory {git_dir}")
         F.prepare_worktree(wt)
@@ -74,6 +76,7 @@ def main():
             F._private_dir(p)
         d = F.new_ledger(o.wo, facts, wt, git_dir, branch, o.base, base_sha, o.known_commit, scratch, records)
         d["host"] = o.host.lower()
+        d["remote"] = bool(F.remote())
         if root_override:
             d["events"].append({"t": F.now(), "type": "root_override", "uid": 0})
         F.write_new_ledger(ledger, d)

@@ -1,0 +1,354 @@
+#!/usr/bin/env python3
+"""forge-remote: the development-host side of ForgeV2 remote execution.
+
+Started by sshd as a forced command (see INSTALL.md), it reads ONE JSON request from stdin and
+writes ONE JSON reply to stdout. It holds no ledger and takes no decisions: the ledger, execution
+limits and review decisions stay on the controller. It only performs bounded Git, file and
+sandboxed-command operations inside the project base directory the host operator fixed in
+authorized_keys with `--base`; everything else is refused.
+
+    command="/srv/forgev2/plugin/remote/forge-remote --base /srv/projects",restrict ssh-ed25519 ...
+
+Never run it as root. Standard library only.
+"""
+import argparse
+import fnmatch
+import json
+import os
+import pwd
+import re
+import socket
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "lib"))
+import forgelib as F  # noqa: E402
+
+MAX_OUT = 200_000
+GIT_OK = {"rev-parse", "config", "remote", "cat-file", "var", "worktree", "branch", "status", "diff", "log",
+          "merge-base", "add", "commit", "reset", "push", "ls-files", "for-each-ref", "show", "symbolic-ref"}
+GIT_ENV_OK = ("GIT_DIR", "GIT_WORK_TREE")
+BWRAP = "/usr/bin/bwrap"
+
+
+class Refused(Exception):
+    pass
+
+
+class Policy:
+    def __init__(self, bases, protected):
+        self.bases = [os.path.realpath(b) for b in bases]
+        self.protected = [os.path.realpath(p) for p in protected]
+
+    @staticmethod
+    def _under(p, root):
+        return os.path.commonpath([p, root]) == root
+
+    def path(self, p, label="path"):
+        """An absolute canonical path inside a base and outside every protected installation."""
+        if not isinstance(p, str) or not os.path.isabs(p) or os.path.normpath(p) != p:
+            raise Refused(f"{label} must be an absolute normalised path: {p!r}")
+        real = os.path.realpath(p)
+        if not any(self._under(real, b) for b in self.bases):
+            raise Refused(f"{label} {p} is outside the designated project base {self.bases}")
+        for prot in self.protected:
+            if self._under(real, prot) or self._under(prot, real):
+                raise Refused(f"{label} {p} overlaps the protected installation {prot}")
+        return real
+
+
+def clean_env(extra=None):
+    home = os.environ.get("FORGE_HELPER_HOME") or pwd.getpwuid(os.geteuid()).pw_dir  # override: test double only
+    env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": home, "LANG": "C.UTF-8",
+           "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0"}
+    if os.environ.get("GIT_ALLOW_PROTOCOL"):  # only ever narrows what Git may use
+        env["GIT_ALLOW_PROTOCOL"] = os.environ["GIT_ALLOW_PROTOCOL"]
+    env.update(extra or {})
+    return env
+
+
+def clip(s):
+    return s if len(s) <= MAX_OUT else s[:MAX_OUT] + "\n[output truncated]"
+
+
+# --- operations ------------------------------------------------------------
+
+def op_identify(pol, req):
+    names = {socket.gethostname().lower(), socket.getfqdn().lower()}
+    override = os.environ.get("FORGE_HELPER_HOSTNAME")  # set by the test double only; sshd cannot pass env
+    if override:
+        names = {override.lower()}
+    else:
+        try:
+            r = subprocess.run(["/usr/sbin/ip", "-o", "addr", "show"], capture_output=True, text=True, timeout=5)
+            for line in r.stdout.splitlines():
+                parts = line.split()
+                for i, item in enumerate(parts[:-1]):
+                    if item in ("inet", "inet6"):
+                        names.add(parts[i + 1].split("/")[0].lower())
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return {"names": sorted(names), "uid": os.geteuid(), "bases": pol.bases}
+
+
+def op_stat(pol, req):
+    out = {}
+    for p in req["paths"]:
+        if not isinstance(p, str) or not os.path.isabs(p):
+            raise Refused(f"path must be absolute: {p!r}")
+        real = os.path.realpath(p)
+        pol.path(real, "path")
+        out[p] = {"real": real, "isdir": os.path.isdir(p), "isfile": os.path.isfile(p),
+                  "lexists": os.path.lexists(p), "islink": os.path.islink(p)}
+    return {"stat": out}
+
+
+def op_mkdirs(pol, req):
+    p = pol.path(req["path"], "path")
+    mode = 0o700 if req.get("private") else 0o755
+    if req.get("exclusive") and os.path.lexists(p):
+        raise Refused(f"{p} already exists")
+    os.makedirs(p, mode=mode, exist_ok=not req.get("exclusive"))
+    return {}
+
+
+def op_prepare_worktree(pol, req):
+    F.prepare_worktree(pol.path(req["worktree"], "worktree"))
+    return {}
+
+
+def op_git(pol, req):
+    args = list(req["args"])
+    cwd = pol.path(req["cwd"], "cwd")
+    lead = []
+    while args and args[0] == "-c":
+        kv = args[1]
+        k, _, v = kv.partition("=")
+        if k == "core.fsmonitor" and v == "false":
+            lead += ["-c", kv]
+        elif k == "core.hooksPath":
+            lead += ["-c", f"core.hooksPath={pol.path(v, 'hooksPath')}"]
+        else:
+            raise Refused(f"git -c {k} is not permitted")
+        args = args[2:]
+    if not args or args[0] not in GIT_OK:
+        raise Refused(f"git {args[:1]} is not permitted")
+    sub, rest = args[0], args[1:]
+    if sub == "config" and (not rest or rest[0] not in ("--get", "--get-regexp", "--get-all")):
+        raise Refused("git config is read-only here")
+    if sub == "remote" and rest[:1] != ["get-url"]:
+        raise Refused("only git remote get-url is permitted")
+    if sub == "branch" and rest[:1] != ["--show-current"] and not rest[:1] == ["-q"] and rest[:1] != ["--list"]:
+        raise Refused("only git branch --show-current/--list is permitted")
+    if sub == "worktree":
+        if rest[:1] != ["add"]:
+            raise Refused("only git worktree add is permitted")
+        for a in rest:  # the worktree target must be inside the base
+            if a.startswith("/"):
+                pol.path(a, "worktree")
+    if any(a.startswith(("--exec-path", "--upload-pack", "--receive-pack", "--git-dir", "--work-tree")) for a in args):
+        raise Refused("that git option is not permitted")
+    if sub == "push" and "--no-force" not in rest:
+        raise Refused("push must carry --no-force")
+    extra = {}
+    for k, v in (req.get("env") or {}).items():
+        if k not in GIT_ENV_OK:
+            raise Refused(f"environment variable {k} is not permitted")
+        extra[k] = pol.path(v, k)
+    r = subprocess.run(["git", *lead, *args], cwd=cwd, capture_output=True, text=True, env=clean_env(extra), timeout=600)
+    return {"rc": r.returncode, "stdout": clip(r.stdout), "stderr": clip(r.stderr)}
+
+
+def op_publish(pol, req):
+    wt = pol.path(req["worktree"], "worktree")
+    files = {k: v.encode("latin-1") for k, v in req["files"].items()}
+    F.write_records(wt, req["wo"], files)
+    return {}
+
+
+def _dir_for_scan(pol, req):
+    return {"git_dir": pol.path(req["git_dir"], "git_dir"), "worktree": pol.path(req["worktree"], "worktree")}
+
+
+def op_gitleaks_bin(pol, req):
+    return {"path": F.gitleaks_bin()}
+
+
+def op_gitleaks(pol, req):
+    d = _dir_for_scan(pol, req)
+    mode = [m for m in req["mode"]]
+    ok = F.gitleaks_scan(d, *mode)
+    return {"ok": ok}
+
+
+def _roles(pol, req):
+    wt = pol.path(req["worktree"], "worktree")
+    sc = pol.path(req["scratch"], "scratch")
+    role = req["role"]
+    if role not in F.ROLES:
+        raise Refused(f"unknown role {role}")
+    return role, wt, sc
+
+
+def _within(p, root):
+    return os.path.commonpath([p, root]) == root
+
+
+def _can_read(pol, p, wt, sc):
+    real = pol.path(p, "file")
+    if not (_within(real, wt) or _within(real, sc)):
+        raise Refused(f"{p} is outside the worktree and scratch directory")
+    return real
+
+
+def _can_write(pol, role, p, wt, sc):
+    if not isinstance(p, str) or not os.path.isabs(p) or os.path.normpath(p) != p:
+        raise Refused(f"file must be an absolute normalised path: {p!r}")
+    parent = os.path.realpath(os.path.dirname(p))
+    real = os.path.join(parent, os.path.basename(p))
+    if os.path.islink(p):
+        raise Refused(f"{p} is a symbolic link; refusing to write through it")
+    pol.path(parent, "file")
+    if _within(real, sc):
+        return real
+    if role == "engineer" and _within(real, wt):
+        for guarded in (os.path.join(wt, ".git"), os.path.join(wt, ".forge")):
+            if real == guarded or _within(real, guarded):
+                raise Refused(f"{p} is protected (.git/.forge)")
+        return real
+    raise Refused(f"{role} may not write {p}")
+
+
+def op_read(pol, req):
+    role, wt, sc = _roles(pol, req)
+    p = _can_read(pol, req["file_path"], wt, sc)
+    with open(p, "rb") as f:
+        data = f.read(5_000_000)
+    lines = data.decode("utf-8", "replace").splitlines()
+    off, lim = int(req.get("offset") or 0), int(req.get("limit") or 2000)
+    chunk = lines[off:off + lim]
+    return {"text": "\n".join(f"{i + off + 1}\t{l}" for i, l in enumerate(chunk))}
+
+
+def op_write(pol, req):
+    role, wt, sc = _roles(pol, req)
+    p = _can_write(pol, role, req["file_path"], wt, sc)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
+    with os.fdopen(fd, "w") as f:
+        f.write(req["content"])
+    return {"text": f"wrote {p}"}
+
+
+def op_edit(pol, req):
+    role, wt, sc = _roles(pol, req)
+    p = _can_write(pol, role, req["file_path"], wt, sc)
+    with open(p) as f:
+        text = f.read()
+    old, new = req["old_string"], req["new_string"]
+    n = text.count(old)
+    if old == new or n == 0:
+        raise Refused("old_string not found" if n == 0 else "old_string equals new_string")
+    if n > 1 and not req.get("replace_all"):
+        raise Refused(f"old_string matches {n} places; make it unique or set replace_all")
+    fd = os.open(p, os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW)
+    with os.fdopen(fd, "w") as f:
+        f.write(text.replace(old, new) if req.get("replace_all") else text.replace(old, new, 1))
+    return {"text": f"edited {p}"}
+
+
+def _walk(root):
+    for dp, dn, fn in os.walk(root):
+        dn[:] = [d for d in dn if d != ".git"]
+        for f in fn:
+            yield os.path.join(dp, f)
+
+
+def op_glob(pol, req):
+    role, wt, sc = _roles(pol, req)
+    base = _can_read(pol, req.get("path") or wt, wt, sc)
+    pat = req["pattern"]
+    rx = re.compile(fnmatch.translate(pat if "/" in pat else "**/" + pat).replace(".*.*", ".*"))
+    hits = sorted(p for p in _walk(base) if rx.match(os.path.relpath(p, base)) or fnmatch.fnmatch(os.path.basename(p), pat))
+    return {"text": "\n".join(hits[:1000]) or "no matches"}
+
+
+def op_grep(pol, req):
+    role, wt, sc = _roles(pol, req)
+    base = _can_read(pol, req.get("path") or wt, wt, sc)
+    rx = re.compile(req["pattern"], re.I if req.get("-i") else 0)
+    glob = req.get("glob")
+    out = []
+    for p in ([base] if os.path.isfile(base) else sorted(_walk(base))):
+        if glob and not fnmatch.fnmatch(os.path.basename(p), glob):
+            continue
+        try:
+            with open(p, errors="replace") as f:
+                for n, line in enumerate(f, 1):
+                    if rx.search(line):
+                        out.append(f"{p}:{n}:{line.rstrip()[:300]}")
+        except OSError:
+            continue
+        if len(out) >= int(req.get("head_limit") or 250):
+            break
+    return {"text": "\n".join(out) or "no matches"}
+
+
+def op_exec(pol, req):
+    role, wt, sc = _roles(pol, req)
+    if not os.access(BWRAP, os.X_OK):
+        raise Refused("bubblewrap is not installed on the development host; commands are not run unsandboxed")
+    home = pwd.getpwuid(os.geteuid()).pw_dir
+    cwd = req.get("cwd") or wt
+    cwd = pol.path(cwd, "cwd")
+    if not (_within(cwd, wt) or _within(cwd, sc)):
+        raise Refused("cwd must be inside the worktree or scratch directory")
+    argv = [BWRAP, "--die-with-parent", "--unshare-all", "--new-session", "--ro-bind", "/", "/",
+            "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp"]
+    for hide in {home, "/root", "/home", "/var/lib/forgev2"}:
+        if os.path.isdir(hide) and not _within(wt, hide) and not _within(sc, hide):
+            argv += ["--tmpfs", hide]
+    if role == "engineer":
+        argv += ["--bind", wt, wt, "--ro-bind", os.path.join(wt, ".forge"), os.path.join(wt, ".forge")]
+        if os.path.exists(os.path.join(wt, ".git")):
+            argv += ["--ro-bind", os.path.join(wt, ".git"), os.path.join(wt, ".git")]
+    argv += ["--bind", sc, sc, "--chdir", cwd, "--setenv", "HOME", "/tmp", "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin",
+             "--setenv", "TMPDIR", "/tmp", "/bin/bash", "-c", req["command"]]
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=min(int(req.get("timeout") or 120), 1500),
+                           env=clean_env(), stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        return {"rc": 124, "stdout": "", "stderr": "command timed out"}
+    return {"rc": r.returncode, "stdout": clip(r.stdout), "stderr": clip(r.stderr)}
+
+
+OPS = {k[3:]: v for k, v in globals().items() if k.startswith("op_")}
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--base", action="append", required=True)
+    ap.add_argument("--protect", action="append", default=[])
+    o = ap.parse_args()
+    if os.geteuid() == 0 and os.environ.get("FORGE_ALLOW_ROOT") != "1":
+        print(json.dumps({"error": "forge-remote must not run as root"}))
+        return 1
+    protected = ["/srv/forgev2", "/srv/foundry", os.path.dirname(HERE)] + o.protect
+    pol = Policy(o.base, protected)
+    try:
+        req = json.loads(sys.stdin.read(32_000_000))
+        op = OPS.get(req.get("op"))
+        if not op:
+            raise Refused(f"unknown operation {req.get('op')!r}")
+        reply = op(pol, req)
+    except Refused as e:
+        reply = {"error": f"refused: {e}"}
+    except (OSError, ValueError, KeyError, F.ForgeError, subprocess.SubprocessError) as e:
+        reply = {"error": f"{type(e).__name__}: {e}"}
+    sys.stdout.write(json.dumps(reply))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

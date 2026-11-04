@@ -85,7 +85,8 @@ def main():
     exe = F.check_runtime()
     with F.locked_ledger(path) as d:
         F.check_repo(d["root"], d["repo"], d["known_commit"])
-        F.require_outside_private(d["worktree"], d["scratch"])
+        if not d.get("remote"):
+            F.require_outside_private(d["worktree"], d["scratch"])
         slots = []
         for role, _ in jobs:
             F.spawn(d, role)

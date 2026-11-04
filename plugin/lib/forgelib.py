@@ -68,6 +68,82 @@ def require_non_root():
                      "(FORGE_ALLOW_ROOT=1 is for a development host only)")
 
 
+# --- remote development host (SSH) ----------------------------------------
+# The ledger, limits and decisions stay on this machine. For a Work Order whose HOST is another
+# machine, every Git, file and command operation on the project goes through `forge-remote`, a
+# bounded helper that sshd starts as a forced command (INSTALL.md). Nothing else runs remotely.
+
+_REMOTE = None
+
+
+class Remote:
+    def __init__(self, host):
+        self.host = host.lower()
+        self.user = os.environ.get("FORGE_REMOTE_USER", "forgev2-dev")
+        home = pwd.getpwuid(os.geteuid()).pw_dir
+        self.key = os.environ.get("FORGE_REMOTE_KEY", os.path.join(home, ".ssh", "forge_remote"))
+        self.known = os.environ.get("FORGE_REMOTE_KNOWN_HOSTS", os.path.join(home, ".ssh", "known_hosts"))
+        self.ssh = os.environ.get("FORGE_REMOTE_SSH", "/usr/bin/ssh")  # a test double may replace it
+        addrs = dict(kv.split("=", 1) for kv in os.environ.get("FORGE_REMOTE_ADDRS", "").split(",") if "=" in kv)
+        self.addr = addrs.get(self.host, self.host)
+
+    def call(self, op, **kw):
+        argv = [self.ssh, "-i", self.key, "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
+                "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={self.known}",
+                "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=30", f"{self.user}@{self.addr}"]
+        try:
+            r = subprocess.run(argv, input=json.dumps({"op": op, **kw}), capture_output=True, text=True,
+                               timeout=kw.get("timeout", 600) + 60 if op == "exec" else 900)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise ForgeError(f"SSH transport to {self.host} is unavailable ({e}); BLOCKED")
+        try:
+            reply = json.loads(r.stdout)
+        except ValueError:
+            raise ForgeError(f"SSH transport to {self.host} failed (exit {r.returncode}): "
+                             f"{(r.stderr or r.stdout).strip()[-300:] or 'no reply'}; BLOCKED")
+        if not isinstance(reply, dict) or "error" in reply:
+            raise ForgeError(f"{self.host}: {reply.get('error') if isinstance(reply, dict) else reply}")
+        return reply
+
+    def git(self, args, cwd, env):
+        r = self.call("git", args=list(args), cwd=cwd, env=env or {})
+        return subprocess.CompletedProcess(["git", *args], r["rc"], r["stdout"], r["stderr"])
+
+    def stat(self, path):
+        return self.call("stat", paths=[path])["stat"][path]
+
+
+def attach(d):
+    """Route project operations to the Work Order's development host when it is another machine."""
+    global _REMOTE
+    _REMOTE = Remote(d["host"]) if d.get("remote") else None
+
+
+def remote():
+    return _REMOTE
+
+
+def rpath(p):
+    return _REMOTE.stat(p)["real"] if _REMOTE else os.path.realpath(p)
+
+
+def risdir(p):
+    return _REMOTE.stat(p)["isdir"] if _REMOTE else os.path.isdir(p)
+
+
+def rlexists(p):
+    return _REMOTE.stat(p)["lexists"] if _REMOTE else os.path.lexists(p)
+
+
+def rmakedirs(p, private=False, exclusive=False):
+    if _REMOTE:
+        _REMOTE.call("mkdirs", path=p, private=private, exclusive=exclusive)
+    else:
+        if exclusive and os.path.lexists(p):
+            raise ForgeError(f"{p} already exists")
+        os.makedirs(p, mode=0o700 if private else 0o755, exist_ok=not exclusive)
+
+
 # --- Git -----------------------------------------------------------------
 
 _GIT_ENV_DROP = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_COMMON_DIR",
@@ -84,6 +160,8 @@ def _env(extra=None):
 
 
 def git_run(*args, cwd=None, env=None):
+    if _REMOTE:
+        return _REMOTE.git(args, cwd, env)
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, env=_env(env))
 
 
@@ -139,13 +217,13 @@ def check_repo(path, expect, known_commit=None):
     """Verify path is the top level of the expected repository. Returns facts dict."""
     if not OWNER_NAME_RE.match(expect or ""):
         raise ForgeError(f"expected repository must be OWNER/NAME, got {expect!r}")
-    path = os.path.realpath(path)
-    if not os.path.isdir(path):
+    path = rpath(path)
+    if not risdir(path):
         raise ForgeError(f"project root does not exist: {path}")
     r = git_run("rev-parse", "--show-toplevel", cwd=path)
     if r.returncode != 0:
         raise ForgeError(f"not a usable git repository: {path}: {r.stderr.strip()}")
-    if os.path.realpath(r.stdout.strip()) != path:
+    if rpath(r.stdout.strip()) != path:
         raise ForgeError(f"{path} is not the repository top level ({r.stdout.strip()})")
     if git("config", "--get-regexp", r"^url\.", cwd=path, check=False):
         raise ForgeError("URL rewriting (url.*.insteadOf / pushInsteadOf) is configured; "
@@ -163,7 +241,7 @@ def check_repo(path, expect, known_commit=None):
     if known_commit:
         if git("cat-file", "-t", known_commit, cwd=path, check=False) != "commit":
             raise ForgeError(f"known commit {known_commit} is not in this repository's history")
-    common = os.path.realpath(os.path.join(path, git("rev-parse", "--git-common-dir", cwd=path)))
+    common = rpath(os.path.join(path, git("rev-parse", "--git-common-dir", cwd=path)))
     return {"root": path, "repo": expect.lower(), "push_url": urls["push"], "common_dir": common}
 
 
@@ -249,6 +327,31 @@ def _pl_dir_at(parent_fd, name):
     return fd
 
 
+def write_records(worktree, wo, files):
+    """Create the record files under <worktree>/.forge/<WO>/ without following symlinks."""
+    fds = [os.open(worktree, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)]
+    try:
+        for name in (".forge", wo):
+            fds.append(_pl_dir_at(fds[-1], name))
+        subdirs = {}
+        for rel, data in files.items():
+            sub, name = os.path.split(rel)
+            if sub and sub not in subdirs:
+                subdirs[sub] = _pl_dir_at(fds[-1], sub)
+            fd = subdirs[sub] if sub else fds[-1]
+            try:
+                os.unlink(name, dir_fd=fd)
+            except FileNotFoundError:
+                pass
+            out = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=fd)
+            with os.fdopen(out, "wb") as f:
+                f.write(data)
+        fds.extend(subdirs.values())
+    finally:
+        for fd in fds:
+            os.close(fd)
+
+
 def publish_records(d, ledger):
     """Copy the ledger, REPORT.md, prompts and raw dispatch outputs into <worktree>/.forge/<WO>/.
 
@@ -275,27 +378,11 @@ def publish_records(d, ledger):
     for name in sorted(os.listdir(disp)) if os.path.isdir(disp) else []:
         with open(os.path.join(disp, name), "rb") as f:
             files[os.path.join("dispatch", name)] = f.read()
-    fds = [os.open(d["worktree"], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)]
-    try:
-        for name in (".forge", d["wo"]):
-            fds.append(_pl_dir_at(fds[-1], name))
-        subdirs = {}
-        for rel, data in files.items():
-            sub, name = os.path.split(rel)
-            if sub and sub not in subdirs:
-                subdirs[sub] = _pl_dir_at(fds[-1], sub)
-            fd = subdirs[sub] if sub else fds[-1]
-            try:
-                os.unlink(name, dir_fd=fd)
-            except FileNotFoundError:
-                pass
-            out = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=fd)
-            with os.fdopen(out, "wb") as f:
-                f.write(data)
-        fds.extend(subdirs.values())
-    finally:
-        for fd in fds:
-            os.close(fd)
+    if _REMOTE:
+        _REMOTE.call("publish", worktree=d["worktree"], wo=d["wo"],
+                     files={k: v.decode("latin-1") for k, v in files.items()})
+    else:
+        write_records(d["worktree"], d["wo"], files)
     return [f".forge/{d['wo']}/{rel}" for rel in files]
 
 
@@ -303,6 +390,9 @@ def publish_records(d, ledger):
 
 def prepare_worktree(wt):
     """Create <worktree>/.forge as a plain directory, so the sandbox can protect it from the start."""
+    if _REMOTE:
+        _REMOTE.call("prepare_worktree", worktree=wt)
+        return
     fd = os.open(wt, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         os.close(_pl_dir_at(fd, ".forge"))
@@ -330,6 +420,31 @@ def require_outside_private(*paths):
                                  "worktrees outside the PL's home and state directories")
 
 
+def _validate_remote_target(host, root, worktrees):
+    """HOST is another machine: reach it over SSH, confirm that machine really is HOST, and check
+    that ROOT and WORKTREES are canonical siblings inside the base the host operator designated.
+    Any transport, identity or path problem is a rejection."""
+    global _REMOTE
+    if not root or not worktrees:
+        raise ForgeError("ROOT and WORKTREES are both mandatory; no implicit worktree location")
+    r = Remote(host)
+    if not os.path.isfile(r.key):
+        raise ForgeError(f"no SSH transport to {host}: key {r.key} is missing; BLOCKED")
+    ident = r.call("identify")
+    if host.lower() not in ident["names"]:
+        raise ForgeError(f"host identity mismatch: reached a machine named {ident['names'][:3]}, "
+                         f"not {host!r}; BLOCKED")
+    for label, path in (("ROOT", root), ("WORKTREES", worktrees)):
+        if not os.path.isabs(path) or os.path.normpath(path) != path:
+            raise ForgeError(f"{label} must be an absolute, canonical path: {path!r}")
+        if r.stat(path)["real"] != path:
+            raise ForgeError(f"{label} must be canonical on {host} (no symlink aliases): {path!r}")
+    if os.path.dirname(root) != os.path.dirname(worktrees) or root == worktrees:
+        raise ForgeError("ROOT and WORKTREES must be distinct siblings in one declared project directory")
+    _REMOTE = r
+    return root, worktrees
+
+
 def validate_project_target(host, root, worktrees):
     """Fail closed on undeclared, remote or overlapping delivery locations.
 
@@ -340,6 +455,8 @@ def validate_project_target(host, root, worktrees):
     """
     if not host or not host.strip() or any(c.isspace() for c in host):
         raise ForgeError("HOST is mandatory: specify the verified development host")
+    global _REMOTE
+    _REMOTE = None
     local = {socket.gethostname().lower(), socket.getfqdn().lower()}
     # IPs are also valid verified HOST values. Compare against addresses
     # actually assigned to a local interface, never DNS resolution alone.
@@ -355,8 +472,7 @@ def validate_project_target(host, root, worktrees):
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass  # If interfaces cannot be enumerated, numeric targets fail closed.
     if host.lower() not in local:
-        raise ForgeError(f"development host {host!r} is not this execution host "
-                         f"({socket.gethostname()}); remote execution is not configured; BLOCKED")
+        return _validate_remote_target(host, root, worktrees)
     if not root or not worktrees:
         raise ForgeError("ROOT and WORKTREES are both mandatory; no implicit worktree location")
     for label, path in (("ROOT", root), ("WORKTREES", worktrees)):
@@ -423,6 +539,7 @@ def locked_ledger(path, write=True):
         except ValueError as e:
             raise ForgeError(f"ledger {path} is corrupt ({e}); the Work Order cannot continue - "
                              "close it as BLOCKED with a new Work Order id")
+        attach(data)
         yield data
         if write:
             _atomic_write(path, _dump(data))
@@ -655,6 +772,8 @@ def specialist_command(d, role, home, exe=CLAUDE):
     tools, body = load_role(role)
     wt, scratch = d["worktree"], d["scratch"]
     private = private_paths()
+    if d.get("remote"):
+        return _remote_specialist_command(d, role, tools, body, home, exe, private)
     require_outside_private(wt, scratch, home)
     system = (f"{body}\n\nForgeV2 assignment: role {role}; worktree {wt}; scratch directory {scratch} "
               "(your starting directory; use `git -C <worktree>` and absolute paths for the worktree). "
@@ -673,9 +792,47 @@ def specialist_command(d, role, home, exe=CLAUDE):
     return argv, env, scratch
 
 
+def _remote_specialist_command(d, role, tools, body, home, exe, private):
+    """A specialist for a remote Work Order. Claude runs here under the one login, but its built-in
+    file and command tools are switched off: it gets only the `forge` MCP bridge, whose tools run on
+    the development host (files confined to the worktree and scratch directory; commands in
+    bubblewrap with no network). The SSH key is held by the bridge process, not by any tool."""
+    wt, scratch = d["worktree"], d["scratch"]
+    r = Remote(d["host"])
+    names = [f"mcp__forge__{t}" for t in tools]
+    system = (f"{body}\n\nForgeV2 assignment: role {role}; development host {d['host']}; worktree {wt}; scratch "
+              f"directory {scratch}. Your tools (Read, Grep, Glob, Bash" + (", Edit, Write" if "Edit" in tools else "")
+              + ") act on that host only; use absolute paths. Bash runs in a sandbox: no network, Git metadata, "
+              "the delivery record and the PL's files are not available" + ("" if role == "engineer" else
+              ", and the worktree is read-only") + ".")
+    mcp = {"mcpServers": {"forge": {"command": "/usr/bin/python3", "args": [
+        os.path.join(PLUGIN_ROOT, "remote", "forge-mcp"), "--host", d["host"], "--role", role,
+        "--worktree", wt, "--scratch", scratch, "--tools", ",".join(tools)],
+        "env": {"FORGE_REMOTE_USER": r.user, "FORGE_REMOTE_KEY": r.key, "FORGE_REMOTE_KNOWN_HOSTS": r.known,
+                "FORGE_REMOTE_SSH": r.ssh, "FORGE_REMOTE_ADDRS": os.environ.get("FORGE_REMOTE_ADDRS", ""),
+                "PATH": "/usr/local/bin:/usr/bin:/bin"}}}}
+    settings = {"disableAllHooks": True, "permissions": {"allow": names, "deny": [f"Read(/{p}/**)" for p in private]},
+                "sandbox": {"enabled": True, "failIfUnavailable": True, "allowUnsandboxedCommands": False,
+                            "autoAllowBashIfSandboxed": True, "excludedCommands": [],
+                            "filesystem": {"allowWrite": [home], "denyRead": list(private)},
+                            "network": {"allowedDomains": [], "strictAllowlist": True}}}
+    argv = [exe, "-p", "--output-format", "json", "--no-session-persistence", "--setting-sources", "",
+            "--strict-mcp-config", "--mcp-config", json.dumps(mcp), "--disable-slash-commands",
+            "--tools", "", "--allowedTools", ",".join(names), "--permission-mode", "dontAsk",
+            "--settings", json.dumps(settings), "--append-system-prompt", system]
+    user = pwd.getpwuid(os.geteuid()).pw_name
+    env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": home, "TMPDIR": os.path.join(home, "tmp"),
+           "USER": user, "LOGNAME": user, "SHELL": "/bin/bash", "LANG": "C.UTF-8",
+           "CLAUDE_CONFIG_DIR": claude_config_dir(), "DISABLE_AUTOUPDATER": "1",
+           "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1", "FORGE_ROLE": role}
+    return argv, env, home
+
+
 # --- gitleaks ---------------------------------------------------------------
 
 def gitleaks_bin():
+    if _REMOTE:
+        return _REMOTE.call("gitleaks_bin")["path"]
     allowed = dict(GITLEAKS_SHA256)
     for h in filter(None, os.environ.get("FORGE_GITLEAKS_SHA256", "").split(",")):
         allowed[h.strip().lower()] = "operator-approved"
@@ -698,6 +855,8 @@ def gitleaks_scan(d, *mode):
     """Scan with ForgeV2's own configuration. Repository allowlists, .gitleaksignore files and
     inline gitleaks:allow comments are not honoured: the scanned source is an empty directory and
     Git is pointed at the Work Order explicitly."""
+    if _REMOTE:
+        return _REMOTE.call("gitleaks", git_dir=d["git_dir"], worktree=d["worktree"], mode=list(mode))["ok"]
     exe = gitleaks_bin()
     with tempfile.TemporaryDirectory(prefix="forgev2-scan-") as empty:
         r = subprocess.run([exe, "git", "--no-banner", "--redact", "--ignore-gitleaks-allow",
