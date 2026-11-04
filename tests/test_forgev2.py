@@ -338,7 +338,7 @@ class IdentityGate(Base):
         r = self.start("--host", "a-different-build-host.invalid")
         self.assertEqual(r.returncode, 1)
         self.assertIn("no SSH transport", r.stderr)
-        self.assertIn("remote execution is not configured", self.start("--host", "203.0.113.111").stderr)
+        self.assertIn("no SSH transport", self.start("--host", "203.0.113.111").stderr)
         self.assertFalse(os.path.exists(os.path.join(self.tmp, "src", "worktrees")))
 
     def test_target_path_boundary(self):
