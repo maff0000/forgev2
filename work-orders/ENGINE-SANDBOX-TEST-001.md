@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Work Order | ENGINE-SANDBOX-TEST-001. ForgeV2 engine development (FND-044); not an application WO. |
-| Artifact | `work-orders/ENGINE-SANDBOX-TEST-001.md` in `maff0000/forgev2`. This file is version v1.0 for review. The immutable version is the commit that adds it, recorded on the Issue. No SHA in this file refers to its own commit. |
+| Artifact | `work-orders/ENGINE-SANDBOX-TEST-001.md` in `maff0000/forgev2`. This file is version v1.1 for review (amends v1.0 at `dadb99fafa58ba1e25e4bafe19ffc8278423f928`: identity architecture only). The immutable version is the commit that adds it, recorded on the Issue. No SHA in this file refers to its own commit. |
 | Status | **Submitted for CGPT exact-version approval.** This file grants no implementation authority until approval is recorded on the Issue. |
 | GitHub Issue | https://github.com/maff0000/forgev2/issues/5. Filled in before the artifact commit; see request W1. |
 | Parent PBIs | FV2-002, FV2-004 (backlog approved at `071426b4cf2b39c39e6e6dd5be619e8afd06d8cb`); supports FV2-D021 |
@@ -11,7 +11,7 @@
 | Original base | `63b6b8ab6c6d3c12d1ef3f0aeabe2ca22fbefb82` (`main`, merge of PR #4) |
 | Engineering start commit | The CGPT-approved artifact commit, which must be a direct child of the original base that adds only this file |
 | Prepared by | Rogue (Orchestrator), 2026-11-06. The preparer cannot approve this WO or dispatch it. |
-| Architect rulings incorporated | CGPT review, 2026-11-06, relayed by Matt: `/tmp` fixtures allowed; supervised engine development on the execution host; separate checkout `/srv/src/forgev2/main`; DevSecOps included; at most three recorded acceptance runs; restricted evidence path; plugin stays 0.3.0; stronger probe corroboration |
+| Architect rulings incorporated | CGPT review, 2026-11-06, relayed by Matt: `/tmp` fixtures allowed; supervised engine development on the execution host; separate checkout `/srv/src/forgev2/main`; DevSecOps included; at most three recorded acceptance runs; restricted evidence path; plugin stays 0.3.0; stronger probe corroboration. **Amendment review, 2026-11-06:** `forgev2-pl` is the multi-project application-delivery PL identity, not tied to any one project. Engine development uses a separate non-root `forgedev` identity (M1 resolved, section 14). The supervised exception is kept while the application sandbox is unaccepted. |
 
 ## 1. Governing authority and revision compatibility
 
@@ -49,7 +49,8 @@ Restore `tests/host/sandbox-boundary.sh` as the canonical, executable host accep
 | WO branch | `work/engine-sandbox-test-001`. Its first commit is the artifact commit, a child of the original base. | Remote `main` still equals the original base, or the Architect re-approves. The branch contains no commits other than the approved artifact commit. `feat/remote-execution` has not merged. |
 | Engine-development checkout | `<execution-host>:/srv/src/forgev2/main` (canonical) and `/srv/src/forgev2/worktrees/engine-sandbox-test-001` (WO worktree), using the FV2-D014 layout | Provisioned before dispatch (prerequisite P2). Clean; `origin` identity verified; worktree HEAD equals the approved artifact commit. |
 | Pinned engine installation | `/srv/forgev2`, root-owned, HEAD at the original base | **Never written, fetched into, patched or used as a worktree.** The baseline listing of `.git` entries is recorded before dispatch. It includes the `FETCH_HEAD` deviation (section 15). |
-| Execution host | The approved Debian 13 execution host. Its identity is held in restricted evidence and not published (FV2-D013). | Verified hostname; `forgev2-pl` account; bubblewrap; socat; root-owned `/usr/local/bin/claude` (version recorded); approved gitleaks build (SHA-256 recorded) |
+| Engine-development identity | `forgedev`: a dedicated non-root account used only for developing ForgeV2 and FOUNDRY. It owns `/srv/src/forgev2/{main,worktrees}`. It holds its own Claude login and a push credential scoped to `maff0000/forgev2` (and `maff0000/foundry` for framework WOs) only. No sudo, no Docker group, and no access to `forgev2-pl`'s home, state or credentials. | Prerequisite P5: account, ownership, login and credential scope verified and recorded. Root's broad `gh` credential is not used. |
+| Execution host | The approved Debian 13 execution host. Its identity is held in restricted evidence and not published (FV2-D013). | Verified hostname; `forgev2-pl` account (the multi-project application PL identity, used here only as the subject of the sandbox test; its project credentials are neither used nor read); bubblewrap; socat; root-owned `/usr/local/bin/claude` (version recorded); approved gitleaks build (SHA-256 recorded) |
 | Test fixture | Each script run declares its own `mktemp -d` roots under `/tmp`, isolated from all project, engine and PL paths. They are removed on exit, except kept failure outputs. | Pre-flight assertion (S2) |
 | Restricted evidence | `/root/forgev2-evidence/ENGINE-SANDBOX-TEST-001/` on the execution host, root `0700` | Exists, with the provisional evidence preserved (P4) |
 | Untouched | Every application repository and checkout, including the CRM; FOUNDRY; ForgeV1; host services and configuration | n/a |
@@ -143,8 +144,8 @@ Each specialist is a fresh, separate, supervised Claude Code session, and none r
 | Product Owner | Matt | Stage approvals, merge decision, sandbox acceptance |
 | Architect | CGPT | Exact-version approval; architectural acceptance |
 | Orchestrator | Rogue | Assigns the approved WO, aggregates Issue status, returns evidence. No implementation, Git writes or acceptance. |
-| PL | A supervised engine-development session on the execution host, assigned by Matt; its execution identity is decision M1 | Entry-gate record, counters, commits, allowlist diff check, PR |
-| Engineer | A fresh supervised session, distinct from the PL | `ENGINEER.log`: changes, unit results, revert-and-rerun per new test, S6 notes |
+| PL | A supervised engine-development session on the execution host, assigned by Matt, running as `forgedev` (M1) | Entry-gate record, counters, commits, allowlist diff check, PR |
+| Engineer | A fresh supervised session as `forgedev`, distinct from the PL | `ENGINEER.log`: changes, unit results, revert-and-rerun per new test, S6 notes |
 | Auditor | A fresh session | Allowlist; guard untouched; no path maps missing or uncorroborated evidence to PASS or FAIL; argv differs only in output flags; tests can fail; roles unchanged |
 | Tester | A fresh session, which is also the host-test operator (root, under Matt's stage approval) | Unit suite, `bash -n`, host runs on the candidate. Disposable demonstrations: a forged result file with no tool event or observer record gives NOT RUN; a refusal gives NOT RUN; bubblewrap reachable shows the marker. Counts recorded as printed. Browser gate not applicable (no web UI), with that stated. |
 | DevSecOps | A fresh session | Root-run safety: temp-path and TOCTOU handling, `rm` scope, permissions of the observer and the evidence directory; canary and credential exposure in the stream-json transcripts and kept outputs; observer privilege; no new dependency; gitleaks clean |
@@ -219,23 +220,17 @@ The provisional 5 PASS / 28 FAIL Auditor result, its corrected reading of 33 NOT
 ## 13. Entry prerequisites
 
 - **P1:** this artifact has been committed, and CGPT's exact-version approval is recorded on the Issue.
-- **P2:** `/srv/src/forgev2/main` is cloned and verified, and `/srv/src/forgev2/worktrees/` is created, with ownership set per decision M1. Provisioning is Helm's lane, under Matt's approval.
+- **P2:** `/srv/src/forgev2/main` is cloned and verified, and `/srv/src/forgev2/worktrees/` is created, owned by `forgedev` (M1). They are currently root-owned and must be re-owned. Provisioning is Helm's lane, under Matt's approval.
 - **P3:** remote `main` still equals the original base, and `feat/remote-execution` has not merged.
 - **P4:** the provisional evidence has been preserved (section 10).
-- **P5:** decision M1 is recorded.
+- **P5:** the `forgedev` identity is provisioned and verified (section 3 row): non-root, no sudo or Docker, own Claude login, push credential scoped to the framework repositories only. The verification is recorded in `PL.log`.
 
-## 14. Decision required from Matt
+## 14. Execution identity (M1, resolved by CGPT, 2026-11-06)
 
-**M1: execution identity for the supervised engine-development sessions and the push credential.**
-- FV2-D019 reserves `root` for Matt's administration and requires non-root engineering execution.
-- `forgev2-pl` holds a deploy key for the CRM repository only.
-- The `maff0000/forgev2` credential on the execution host belongs to root's `gh` login.
-
-Options:
-- (a) A narrowly scoped, FV2-D022-style exception for this WO only: a root-local supervised session, with Matt approving each stage.
-- (b) A separate non-root engine-development account with its own scoped push credential.
-
-The Architect's ruling ("supervised engine-development implementation on the execution host") does not settle which. Option (b) needs a host change (Helm) and a credential decision.
+- **Engine and framework development** (this WO) runs as the dedicated non-root **`forgedev`** identity. It uses its own push credential, scoped to the framework repositories. **Root's broad `gh` credential is not used for implementation.**
+- **`forgev2-pl`** is the reusable, multi-project application-delivery PL identity. Each application WO is scoped by repository, execution target, worktree and the credential selected for that repository. This is authentication and procedural scoping, not filesystem isolation between projects (FOUNDRY-ORCH-SETUP-001 §3.7). The CRM deploy key it holds is specific to that repository; the account is not. This WO uses `forgev2-pl` only as the subject of the sandbox test.
+- **Supervised engine-development exception.** The ForgeV2 application sandbox is not yet accepted, so this WO is implemented and reviewed by supervised Claude Code sessions as `forgedev`, not by ForgeV2 self-delivery. **An accepted application sandbox is not a precondition for repairing the sandbox test itself.**
+- **Host-test runs.** `sandbox-boundary.sh` must run as root, because it drives `forgev2-pl` through `runuser`. Each run happens only under Matt's explicit stage approval (AC11). No other step runs as root.
 
 ## 15. Recorded deviation: Git metadata write in the pinned installation
 
