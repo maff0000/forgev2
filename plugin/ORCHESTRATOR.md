@@ -19,6 +19,7 @@ Orchestrator has **not** been run yet.
   more. The PL tools refuse to run as root unless `FORGE_ALLOW_ROOT=1`, which is
   for development hosts only. Never pass credentials in the Work Order, the
   prompt or the environment.
+- **Development host (FV2-D024):** on a host Matt designates as a development host, the PL may run under an existing account he names, including root, with that account's Claude login and Git credential. `ROOT` and its `.git` are then owned by that account, and a root PL is started with `FORGE_ALLOW_ROOT=1` and without `sudo -u forgev2-pl`. See `INSTALL.md`. Never use the override to get past a failing gate.
 - The host needs the one-time set-up in `INSTALL.md`: bubblewrap and socat,
   `/usr/local/bin/claude`, an approved gitleaks, and the login. The plugin is
   loaded per run with `--plugin-dir` from the root-owned checkout

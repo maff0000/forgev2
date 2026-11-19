@@ -13,7 +13,7 @@ python3 -m unittest discover -s <checkout>/tests    # plugin self-tests
 sudo <checkout>/tests/host/os-boundary.sh <checkout>/plugin   # execution host only
 ```
 
-Prerequisites on the execution host: the one-time host set-up below, `git`, `python3`, gitleaks installed root-owned at `/usr/local/bin/gitleaks` from the official release after checking the archive against the release-published SHA-256 (v8.30.1 linux x64: archive `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`, binary `88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509`; the plugin refuses any other build unless its SHA-256 is listed in `FORGE_GITLEAKS_SHA256`), and push access for `forgev2-pl` to the target repository.
+Prerequisites on the execution host: the one-time host set-up below, `git`, `python3`, gitleaks installed root-owned at `/usr/local/bin/gitleaks` from the official release after checking the archive against the release-published SHA-256 (v8.30.1 linux x64: archive `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`, binary `88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509`; the plugin refuses any other build unless its SHA-256 is listed in `FORGE_GITLEAKS_SHA256`), and push access for the PL account to the target repository.
 
 ## One-time host set-up (root, with Matt's approval)
 
@@ -36,6 +36,17 @@ sudo -u forgev2-pl -H sh -c 'cd && DISABLE_AUTOUPDATER=1 /usr/local/bin/claude a
 ```
 
 Verify with `sudo <checkout>/tests/host/sandbox-boundary.sh <checkout>/plugin`.
+
+### Development host (FV2-D024)
+
+On a host Matt designates as a development host, the PL and specialists may run under an existing account he names, including root, instead of `forgev2-pl`. In that case:
+
+- Step 1 (bubblewrap, socat), the root-owned `/usr/local/bin/claude` and the approved gitleaks are still required.
+- No account is created. Step 2b uses the account's existing Git identity, and step 3 is not needed when the account is already logged in to Claude.
+- When the account is root, the PL is started with `FORGE_ALLOW_ROOT=1`. The ledger records the override.
+- Start the PL in an empty directory, not in `ROOT`, a worktree or a directory with its own `CLAUDE.md`. The account's user-level Claude settings, hooks, plugins and memory load into the PL session; check them before the first Work Order.
+
+The specialists' sandbox is then the only boundary between a Work Order and everything that account can read. A root PL delivery and the sandbox boundary test have not yet been run in this profile; treat the first run on each such host as the proof. Review identity separation with Matt before using a production host.
 
 ## Matt's one-line request
 

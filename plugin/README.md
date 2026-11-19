@@ -143,7 +143,9 @@ sets: its proxy password (the proxy allows no hosts) and its session-inbox token
 - **Projects outside the PL home:** a project or worktree inside the PL's home
   or state directory is refused (specialists could not read it anyway).
 - **Not as root:** the tools refuse to run as root unless `FORGE_ALLOW_ROOT=1`
-  (development hosts only; recorded in the ledger).
+  (development hosts only; recorded in the ledger). On a host Matt designates as a
+  development host the PL may run as root this way (FV2-D024). Specialists can then read
+  everything root can read except root's home, Claude configuration and ForgeV2 state.
 
 **Guard hook (policy on the PL's own tool calls):** while a Work Order is open
 the PL cannot start in-process subagents or run `claude`/`bwrap` directly, makes
